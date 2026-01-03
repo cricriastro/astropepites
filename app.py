@@ -9,16 +9,28 @@ from datetime import datetime
 # --- CONFIGURATION ---
 st.set_page_config(page_title="AstroPépites Pro", layout="wide")
 
-# --- STYLE HAUTE VISIBILITÉ ---
+# --- STYLE HAUTE VISIBILITÉ (CORRIGÉ) ---
 st.markdown("""
     <style>
     .stApp { background-color: #000000; color: #FFFFFF; }
-    h1, h2, h3, h4 { color: #FF3333 !important; }
-    label, p, span { color: #FFFFFF !important; font-weight: bold; }
+    h1, h2, h3 { color: #FF3333 !important; }
+    /* Texte blanc partout, même dans la barre latérale */
+    .stMarkdown, .stText, label, p, span { color: #FFFFFF !important; font-weight: bold !important; }
+    /* Fond des cases de saisie pour qu'on voit le texte */
+    input { background-color: #222 !important; color: #FF3333 !important; border: 1px solid #FF3333 !important; }
+    .stSelectbox div { background-color: #222 !important; color: #FFFFFF !important; }
+    /* Onglets */
     .stTabs [data-baseweb="tab-list"] { background-color: #1a1a1a; }
     .stTabs [data-baseweb="tab"] { color: #FF3333 !important; }
     .stMetric { background-color: #1a0000; border: 1px solid #FF3333; border-radius: 10px; padding: 10px; }
-    div[data-testid="stExpander"] { background-color: #111; border: 1px solid #333; }
+    /* Cartes des cibles */
+    .target-card {
+        background-color: #111;
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -26,10 +38,10 @@ st.markdown("""
 st.sidebar.title("🔭 AstroPépites Pro")
 lang = st.sidebar.radio("Langue", ["Français", "English"])
 
-st.sidebar.header("📍 Lieu & Horizon")
+st.sidebar.header("📍 Position & Horizon")
 u_lat = st.sidebar.number_input("Latitude", value=46.0, format="%.4f")
 u_lon = st.sidebar.number_input("Longitude", value=6.0, format="%.4f")
-h_mask = st.sidebar.slider("Masque Horizon (Altitude mini °)", 0, 60, 25)
+h_mask = st.sidebar.slider("Masque Horizon (Altitude min °)", 0, 60, 25)
 
 st.sidebar.header("📸 Matériel")
 TELESCOPES = {"Evolux 62ED": (400, 62), "RedCat 51": (250, 51), "Newton 200/800": (800, 200)}
@@ -48,14 +60,14 @@ res = round((px * 206) / focale, 2)
 st.title("🔭 AstroPépites Pro")
 tab1, tab2, tab3, tab4 = st.tabs(["💎 Radar de Pépites", "☁️ Météo Live", "🔋 Énergie", "☄️ Comètes"])
 
-# --- TAB 1 : RADAR ---
+# --- TAB 1 : RADAR (FORMAT CARTES POUR VOIR LES PHOTOS) ---
 with tab1:
     db = [
-        {"name": "Sh2-157", "ra": "23:16:04", "dec": "+60:02:06", "type": "Emission", "size": 60},
-        {"name": "vdB 141", "ra": "21:16:29", "dec": "+68:15:51", "type": "Reflection", "size": 15},
-        {"name": "Arp 273", "ra": "02:21:28", "dec": "+39:22:32", "type": "Galaxy", "size": 10},
-        {"name": "LDN 1235", "ra": "22:13:14", "dec": "+73:14:41", "type": "Dark", "size": 50},
-        {"name": "Abell 21", "ra": "07:29:02", "dec": "+13:14:48", "type": "Planetary", "size": 12},
+        {"name": "Sh2-157 (Lobster)", "ra": "23:16:04", "dec": "+60:02:06", "type": "Emission", "size": 60},
+        {"name": "vdB 141 (Ghost)", "ra": "21:16:29", "dec": "+68:15:51", "type": "Reflection", "size": 15},
+        {"name": "Arp 273 (Rose)", "ra": "02:21:28", "dec": "+39:22:32", "type": "Galaxy", "size": 10},
+        {"name": "LDN 1235 (Shark)", "ra": "22:13:14", "dec": "+73:14:41", "type": "Dark", "size": 50},
+        {"name": "Abell 21 (Medusa)", "ra": "07:29:02", "dec": "+13:14:48", "type": "Planetary", "size": 12},
     ]
     
     now = Time.now()
@@ -63,55 +75,54 @@ with tab1:
     try: moon_pos = get_body("moon", now)
     except: moon_pos = None
 
-    results = []
+    st.write(f"### 🎯 Cibles au-dessus de {h_mask}°")
+    
     for t in db:
         coord = SkyCoord(t['ra'], t['dec'], unit=(u.hourangle, u.deg))
         altaz = coord.transform_to(AltAz(obstime=now, location=loc))
         
         if altaz.alt.deg > h_mask:
-            # LIEN IMAGE NASA STABLE
-            img_url = f"https://skyview.gsfc.nasa.gov/current/cgi/runquery.pl?survey=DSS2%20Red&position={t['ra']},{t['dec']}&size=0.3&pixels=200&return=jpg"
-            
-            results.append({
-                "Aperçu": img_url,
-                "Nom": t['name'],
-                "Altitude": f"{round(altaz.alt.deg)}°",
-                "Filtre": "Dual-Band" if t['type'] == "Emission" else "RGB Pur",
-                "Expo": f"{round(4 * (f_ratio/4)**2 * (80/qe), 1)}h",
-                "Cadrage": f"{round((t['size']/fov_w)*100)}%",
-                "ra": t['ra'], "dec": t['dec']
-            })
-
-    if results:
-        df = pd.DataFrame(results)
-        st.data_editor(df.drop(columns=['ra', 'dec']), column_config={"Aperçu": st.column_config.ImageColumn("Aperçu")}, hide_index=True)
-        st.download_button("📥 Télécharger Plan ASIAIR", df[["Nom", "ra", "dec"]].to_csv(index=False), "plan.csv")
+            with st.container():
+                col1, col2, col3 = st.columns([1, 2, 1])
+                
+                # PHOTO (NASA SkyView avec format forcé)
+                with col1:
+                    img_url = f"https://skyview.gsfc.nasa.gov/current/cgi/runquery.pl?survey=DSS2%20Red&position={t['ra']},{t['dec']}&size=0.3&pixels=300&return=jpg"
+                    st.image(img_url, caption=t['name'], use_container_width=True)
+                
+                # INFOS
+                with col2:
+                    st.subheader(t['name'])
+                    st.write(f"**Altitude:** {round(altaz.alt.deg)}° | **Type:** {t['type']}")
+                    st.write(f"**Filtre:** {'Dual-Band (Hα/OIII)' if t['type']=='Emission' else 'RGB Pur'}")
+                    st.write(f"**Cadrage:** {round((t['size']/fov_w)*100)}% du capteur")
+                
+                # EXPO & LUNE
+                with col3:
+                    integration = round(4 * (f_ratio/4)**2 * (80/qe), 1)
+                    st.metric("Temps total", f"{integration}h")
+                    if moon_pos:
+                        st.write(f"🌙 Lune à : {round(coord.separation(moon_pos).deg)}°")
+                
+                st.markdown("---")
 
 # --- TAB 2 : MÉTÉO ---
 with tab2:
     try:
         w_url = f"https://api.open-meteo.com/v1/forecast?latitude={u_lat}&longitude={u_lon}&current_weather=true&hourly=cloudcover,relativehumidity_2m"
-        w_data = requests.get(w_url).json()
+        w = requests.get(w_url).json()
         st.subheader(f"🛰️ Météo Live ({u_lat}, {u_lon})")
         c1, c2, c3 = st.columns(3)
-        c1.metric("Nuages", f"{w_data['hourly']['cloudcover'][0]}%")
-        c2.metric("Humidité", f"{w_data['hourly']['relativehumidity_2m'][0]}%")
-        c3.metric("Temp", f"{w_data['current_weather']['temperature']}°C")
-    except: st.error("Erreur connexion météo.")
+        c1.metric("Nuages", f"{w['hourly']['cloudcover'][0]}%")
+        c2.metric("Humidité", f"{w['hourly']['relativehumidity_2m'][0]}%")
+        c3.metric("Temp", f"{w['current_weather']['temperature']}°C")
+    except: st.error("Erreur Météo")
 
-# --- TAB 3 : ÉNERGIE ---
-with tab3:
-    st.subheader("🔋 Calculateur de Batterie")
-    batt_wh = st.number_input("Capacité Batterie (Wh)", value=240)
-    total_w = st.slider("Consommation Totale (Watts)", 10, 100, 35)
-    st.metric("Autonomie restante", f"{round((batt_wh * 0.9) / total_w, 1)} heures")
-
-# --- TAB 4 : COMÈTES ---
+# --- TAB 4 : COMÈTES (RÉPARÉ) ---
 with tab4:
     st.subheader("☄️ Assistant Comètes")
-    st.write("Entrez la vitesse de déplacement pour calculer votre temps de pose maximum sans flou.")
-    v_c = st.number_input("Vitesse de la comète (arcsec/min)", value=1.0)
+    st.write("Calculez votre temps de pose maximum pour garder un noyau net.")
+    v_c = st.number_input("Vitesse comète (arcsec/min)", value=1.0, step=0.1)
     max_exp = res / (v_c / 60)
-    st.metric("Temps de pose MAX conseillé", f"{round(max_exp, 1)} secondes")
-    st.write("---")
-    st.markdown("[🔍 Voir les comètes du moment](https://theskylive.com/comets)")
+    st.metric("Temps de pose MAX", f"{round(max_exp, 1)} secondes")
+    st.info("💡 Si vous posez plus longtemps, la comète sera floue par rapport aux étoiles.")
