@@ -2,7 +2,8 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_body, get_sun, get_moon
+from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_body
+from astropy import get_moon, get_sun # Importation corrigée de get_moon et get_sun
 from astropy.time import Time
 import astropy.units as u
 from datetime import datetime, timedelta
@@ -72,7 +73,7 @@ angles = np.linspace(0, 2*np.pi, 8, endpoint=False)
 fig_pol, ax_pol = plt.subplots(figsize=(3,3), subplot_kw={"projection":"polar"})
 ax_pol.set_theta_zero_location("N")
 ax_pol.set_theta_direction(-1)
-ax_pol.fill(np.append(angles, angles[0]), m_vals + [m_vals[0]], color="red", alpha=0.4)
+ax_pol.fill(np.append(angles, angles), m_vals + [m_vals], color="red", alpha=0.4)
 ax_pol.set_yticklabels([])
 ax_pol.set_facecolor("black")
 fig_pol.patch.set_facecolor("black")
@@ -93,7 +94,7 @@ tab1, tab2, tab3 = st.tabs(["💎 Radar Cibles", "☄️ Système Solaire", "�
 
 # --- TAB 1 : RADAR ---
 with tab1:
-    col_sel, col_info = st.columns([1, 1])
+    col_sel, col_info = st.columns()
     with col_sel:
         target_name = st.selectbox("Sélectionner une pépite", [o["name"] for o in catalog])
         obj = next(o for o in catalog if o["name"] == target_name)
@@ -131,7 +132,7 @@ with tab2:
     st.subheader("🌑 Éphémérides de la nuit")
     c1, c2, c3 = st.columns(3)
     
-    moon = get_body("moon", now).transform_to(AltAz(obstime=now, location=location))
+    moon = get_moon(now).transform_to(AltAz(obstime=now, location=location))
     sun = get_sun(now).transform_to(AltAz(obstime=now, location=location))
     
     c1.metric("Lune", f"{moon.alt.deg:.1f}°")
