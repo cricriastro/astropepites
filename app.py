@@ -80,17 +80,22 @@ def horizon_limit(az):
     return mask_values[idx]
 
 # =========================
-# BOUSSOLE
+# BOUSSOLE (CORRIGÉE)
 # =========================
 angles = np.linspace(0,2*np.pi,8,endpoint=False)
 fig,ax = plt.subplots(figsize=(3,3), subplot_kw={"projection":"polar"})
 ax.set_theta_zero_location("N")
 ax.set_theta_direction(-1)
-ax.fill(np.append(angles,angles),
-        mask_values+[mask_values],
+
+# Assurez-vous que les listes sont des numpy arrays et fermées correctement
+angles_closed = np.append(angles, angles[0])
+mask_values_closed = np.append(mask_values, mask_values[0])
+
+ax.fill(angles_closed,
+        mask_values_closed,
         color="red",alpha=0.4)
-ax.fill_between(np.append(angles,angles),
-                mask_values+[mask_values],90,
+ax.fill_between(angles_closed,
+                mask_values_closed,90,
                 color="green",alpha=0.2)
 ax.set_yticklabels([])
 ax.set_xticklabels(["N","NE","E","SE","S","SW","W","NW"])
@@ -161,7 +166,7 @@ with tab1:
 # =========================
 with tab2:
     st.subheader("☄️ Comètes (calcul temps réel)")
-    # Méthode robuste: utiliser get_body() pour tous les corps célestes
+    # Utilisation de get_body pour Mars, fonctionne toujours
     mars = get_body("mars", now) 
     altaz_mars = mars.transform_to(AltAz(obstime=now,location=location))
     st.write(f"Exemple Mars (test gratuit) – Alt {altaz_mars.alt:.1f}")
