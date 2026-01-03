@@ -11,7 +11,7 @@ from streamlit_js_eval import streamlit_js_eval
 import math
 
 # --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="AstroPépites Pro v4.4", layout="wide")
+st.set_page_config(page_title="AstroPépites Pro v4.3", layout="wide")
 
 # --- STYLE VISION NOCTURNE ---
 st.markdown("""
@@ -25,8 +25,8 @@ st.markdown("""
     .stTabs [data-baseweb="tab"] { color: #FF3333 !important; font-weight: bold !important; }
     .mosaic-alert { background-color: #331a00; border: 1px dashed #FF8800; padding: 10px; border-radius: 10px; color: #FF8800 !important; font-weight: bold; }
     .boost-box { background-color: #001a33; border: 1px solid #0088FF; padding: 10px; border-radius: 10px; color: #0088FF !important; }
-    .safety-box { background-color: #440000; border: 2px solid #FF0000; padding: 15px; border-radius: 10px; color: white; font-weight: bold; text-align: center; }
     hr { border: 1px solid #333; }
+    /* Style pour les sélecteurs */
     .stSelectbox div[data-baseweb="select"] { background-color: #222 !important; color: white !important; }
     </style>
     """, unsafe_allow_html=True)
@@ -42,8 +42,8 @@ u_lon = st.sidebar.number_input("Longitude", value=st.session_state.get('lon', 7
 
 # BOUSSOLE ASIAIR
 st.sidebar.header("🌲 Masque d'Horizon")
-with st.sidebar.expander("Réglage Obstacles", expanded=False):
-    mN = st.slider("Nord", 0, 90, 15); mNE = st.slider("NE", 0, 90, 15); mE = st.slider("Est", 0, 90, 20)
+with st.sidebar.expander("Obstacles", expanded=False):
+    mN = st.slider("Nord", 0, 90, 20); mNE = st.slider("NE", 0, 90, 15); mE = st.slider("Est", 0, 90, 20)
     mSE = st.slider("SE", 0, 90, 30); mS = st.slider("Sud", 0, 90, 15); mSW = st.slider("SW", 0, 90, 15)
     mO = st.slider("Ouest", 0, 90, 20); mNO = st.slider("NO", 0, 90, 15)
 
@@ -74,13 +74,15 @@ f_ratio = focale / diam; fov_w = (sw * 3438) / focale; fov_h = (sh * 3438) / foc
 db = [
     {"name": "M31 (Andromède)", "ra": "00:42:44", "dec": "+41:16:09", "type": "Galaxy", "size_w": 180, "size_h": 60, "cat": "Messier"},
     {"name": "M42 (Orion)", "ra": "05:35:17", "dec": "-05:23:28", "type": "Emission", "size_w": 65, "size_h": 60, "cat": "Messier"},
+    {"name": "M33 (Triangle)", "ra": "01:33:50", "dec": "+30:39:37", "type": "Galaxy", "size_w": 70, "size_h": 40, "cat": "Messier"},
+    {"name": "NGC 2237 (Rosette)", "ra": "06:32:19", "dec": "+05:03:12", "type": "Emission", "size_w": 80, "size_h": 80, "cat": "NGC / IC"},
     {"name": "Sh2-157 (Lobster)", "ra": "23:16:04", "dec": "+60:02:06", "type": "Emission", "size_w": 60, "size_h": 50, "cat": "Pépites Rares"},
     {"name": "vdB 141 (Ghost)", "ra": "21:16:29", "dec": "+68:15:51", "type": "Reflection", "size_w": 15, "size_h": 15, "cat": "Pépites Rares"},
-    {"name": "24P/Schaumasse", "ra": "12:58:05", "dec": "+14:01:06", "type": "Comet", "size_w": 10, "size_h": 10, "cat": "Comètes"},
+    {"name": "LDN 1235 (Shark)", "ra": "22:13:14", "dec": "+73:14:41", "type": "Dark", "size_w": 50, "size_h": 40, "cat": "Pépites Rares"},
 ]
 
 # --- APP ---
-st.title("🔭 AstroPépites Pro v4.4")
+st.title("🔭 AstroPépites Pro v4.3")
 t_radar, t_meteo, t_batt = st.tabs(["💎 Radar & Catalogues", "☁️ Météo Live", "🔋 Énergie"])
 
 now = Time.now(); obs_loc = EarthLocation(lat=u_lat*u.deg, lon=u_lon*u.deg)
@@ -88,51 +90,93 @@ try: moon_pos = get_body("moon", now)
 except: moon_pos = None
 
 with t_radar:
+    # --- DOUBLE MENU DÉROULANT ---
     col_cat, col_obj = st.columns(2)
-    with col_cat:
-        selected_cat = st.selectbox("📂 1. Choisir un catalogue", ["Pépites Rares", "Messier", "Planètes", "Comètes", "Événements 2026"])
     
-    if selected_cat == "Planètes": filtered_objs = ["Jupiter", "Saturn", "Mars"]
-    elif selected_cat == "Événements 2026": filtered_objs = ["Éclipse Solaire (12 Août)", "Éclipse Lunaire (28 Août)"]
-    else: filtered_objs = [t['name'] for t in db if t['cat'] == selected_cat]
+    with col_cat:
+        selected_cat = st.selectbox("📂 1. Choisir un catalogue", ["Tout", "Messier", "NGC / IC", "Pépites Rares", "Planètes"])
+    
+    # Filtrage de la base de données
+    if selected_cat == "Planètes":
+        filtered_objs = ["Jupiter", "Saturn", "Mars"]
+    else:
+        filtered_objs = [t['name'] for t in db if selected_cat == "Tout" or t['cat'] == selected_cat]
     
     with col_obj:
-        active_target_name = st.selectbox("🎯 2. Choisir l'objet", ["--- Sélectionner ---"] + filtered_objs)
+        active_target_name = st.selectbox("🎯 2. Choisir l'objet à analyser", ["--- Sélectionner ---"] + filtered_objs)
 
     if active_target_name != "--- Sélectionner ---":
         st.markdown("---")
         
-        # --- CAS ÉVÉNEMENTS ---
-        if selected_cat == "Événements 2026":
-            if "Solaire" in active_target_name:
-                st.subheader("🌞 Éclipse Solaire - 12 Août 2026")
-                st.markdown('<div class="safety-box">⚠️ FILTRE SOLAIRE ND5.0 OBLIGATOIRE ! Ne pointez jamais le soleil sans protection.</div>', unsafe_allow_html=True)
-                st.write("Visibilité à votre position : ~90% (Suisse/France). Prévoyez un timelapse !")
-            else:
-                st.subheader("🌕 Éclipse Lunaire - 28 Août 2026")
-                st.write("Éclipse partielle visible en fin de nuit. Prévoyez du RGB sans filtre pour garder les teintes rouges.")
-
-        # --- CAS PLANÈTES / COMÈTES / DSO ---
-        else:
-            if selected_cat == "Planètes":
-                coord = get_body(active_target_name.lower(), now)
-                t_type, t_size_w = "Planet", 1
-            else:
-                t = next(obj for obj in db if obj['name'] == active_target_name)
-                coord = SkyCoord(t['ra'], t['dec'], unit=(u.hourangle, u.deg))
-                t_type, t_size_w, t_size_h = t['type'], t['size_w'], t['size_h']
+        # Cas spécial Planètes
+        if selected_cat == "Planètes" or active_target_name in ["Jupiter", "Saturn", "Mars"]:
+            p_coord = get_body(active_target_name.lower(), now)
+            altaz = p_coord.transform_to(AltAz(obstime=now, location=obs_loc))
+            limit = get_horizon_limit(altaz.az.deg)
+            visible = altaz.alt.deg > limit
             
+            col1, col2, col3 = st.columns([1.5, 2, 1.2])
+            with col1:
+                st.image(f"https://alasky.u-strasbg.fr/hips-image-services/hips2fits?hips=CDS%2FP%2FDSS2%2Fcolor&ra={p_coord.ra.deg}&dec={p_coord.dec.deg}&width=450&height=450&fov=0.1&format=jpg", use_container_width=True)
+            with col2:
+                st.subheader(f"🪐 {active_target_name} {'✅' if visible else '❌'}")
+                st.write(f"📍 Altitude : **{round(altaz.alt.deg)}°** | ✨ Filtre : **RGB / IR-Pass**")
+            with col3:
+                st.metric("Mode", "Vidéo / Lucky")
+        
+        # Cas DSO
+        else:
+            t = next(obj for obj in db if obj['name'] == active_target_name)
+            coord = SkyCoord(t['ra'], t['dec'], unit=(u.hourangle, u.deg))
             altaz = coord.transform_to(AltAz(obstime=now, location=obs_loc))
             limit = get_horizon_limit(altaz.az.deg)
             visible = altaz.alt.deg > limit
 
             col1, col2, col3 = st.columns([1.5, 2, 1.2])
             with col1:
-                fov_img = 0.1 if t_type == "Planet" else 1.5
-                img = f"https://alasky.u-strasbg.fr/hips-image-services/hips2fits?hips=CDS%2FP%2FDSS2%2Fcolor&ra={coord.ra.deg}&dec={coord.dec.deg}&width=450&height=450&fov={fov_img}&format=jpg"
+                img = f"https://alasky.u-strasbg.fr/hips-image-services/hips2fits?hips=CDS%2FP%2FDSS2%2Fcolor&ra={coord.ra.deg}&dec={coord.dec.deg}&width=450&height=450&fov=1.5&format=jpg"
                 st.image(img, use_container_width=True)
-            
             with col2:
                 status = "✅ DÉGAGÉ" if visible else f"❌ MASQUÉ (<{limit}°)"
-                st.subheader(f"{active_target_name} {status}")
-                st.write(f"📍 Alt : *
+                st.subheader(f"{t['name']} {status}")
+                st.write(f"📍 Alt : **{round(altaz.alt.deg)}°** | ✨ Type : **{t['type']}**")
+                
+                if t['type'] == "Galaxy":
+                    st.markdown('<div class="boost-box">🚀 **Expert Boost** : Ajoutez du H-Alpha pour les régions HII !</div>', unsafe_allow_html=True)
+                
+                cadrage = round((t['size_w'] / fov_w) * 100)
+                if cadrage > 90:
+                    pw, ph = math.ceil(t['size_w']/(fov_w*0.8)), math.ceil(t['size_h']/(fov_h*0.8))
+                    st.markdown(f'<div class="mosaic-alert">⚠️ MOSAÏQUE : {pw} x {ph} panneaux</div>', unsafe_allow_html=True)
+
+                # Planning
+                times = now + np.linspace(0, 12, 24) * u.hour
+                hours = [(datetime.now() + timedelta(hours=i*0.5)).strftime("%H:%M") for i in range(24)]
+                alts = [max(0, coord.transform_to(AltAz(obstime=ts, location=obs_loc)).alt.deg) for ts in times]
+                st.line_chart(pd.DataFrame({"Altitude": alts}, index=hours), color="#FF3333")
+
+            with col3:
+                expo = round(4 * (f_ratio/4)**2 * (80/qe), 1)
+                st.metric("Temps total", f"{expo}h")
+                if moon_pos: st.write(f"🌙 Lune à {round(coord.separation(moon_pos).deg)}°")
+                st.write(f"📐 Champ : {round(fov_w)}' x {round(fov_h)}'")
+    else:
+        st.info("Choisissez un catalogue puis un objet pour lancer l'analyse.")
+
+# Onglets Météo et Batterie identiques
+with t_meteo:
+    try:
+        w_url = f"https://api.open-meteo.com/v1/forecast?latitude={u_lat}&longitude={u_lon}&current_weather=true&hourly=cloudcover&timezone=auto"
+        w = requests.get(w_url).json()
+        df_w = pd.DataFrame({"Heure": [d[11:16] for d in w['hourly']['time'][:24]], "Nuages": w['hourly']['cloudcover'][:24]}).set_index("Heure")
+        st.subheader("☁️ Prévisions Nuages (%)")
+        st.area_chart(df_w, color="#FF3333")
+    except: st.write("Météo indisponible")
+
+with t_batt:
+    st.subheader("🔋 Batterie")
+    wh = st.number_input("Wh batterie", value=240)
+    c1, c2 = st.columns(2)
+    p_m = c1.slider("Monture", 5, 25, 10); p_t = c1.slider("TEC", 0, 40, 20)
+    p_p = c2.slider("ASIAIR/PC", 5, 25, 10); p_d = c2.slider("Chauffage", 0, 40, 15)
+    st.metric("Autonomie", f"{round((wh*0.9)/(p_m+p_t+p_p+p_d), 1)} h")
