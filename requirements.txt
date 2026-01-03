@@ -3,3 +3,4 @@ pandas
 astropy
 requests
 matplotlib
+streamlit-js-eval
