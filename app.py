@@ -16,195 +16,115 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"] { background-color: #1a1a1a; }
     .stTabs [data-baseweb="tab"] { color: #ff4b4b; }
     .stMetric { background-color: #1a0000; border: 1px solid #ff4b4b; border-radius: 10px; padding: 10px; }
-    .stSelectbox, .stSlider, .stNumberInput { color: #ff4b4b !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- DICTIONNAIRE MULTILINGUE ---
-TEXTS = {
-    "fr": {
-        "title": "🔭 AstroPépites Pro",
-        "weather_tab": "☁️ Météo & Seeing",
-        "targets_tab": "💎 Radar de Pépites",
-        "power_tab": "🔋 Énergie Nomade",
-        "comet_tab": "☄️ Comètes",
-        "setup_header": "🛠️ Votre Setup",
-        "orig": "Originalité",
-        "expo": "Temps de pose",
-        "filter": "🧪 Conseil Filtre",
-        "batt_model": "Modèle de batterie",
-        "batt_capa": "Capacité (Wh)",
-        "batt_cons": "Consommation totale (W)",
-        "batt_res": "Autonomie estimée",
-        "export_btn": "📥 Télécharger pour ASIAIR (Plan)",
-        "sampling": "Échantillonnage",
-    },
-    "en": {
-        "title": "🔭 AstroGems Pro",
-        "weather_tab": "☁️ Weather & Seeing",
-        "targets_tab": "💎 Target Radar",
-        "power_tab": "🔋 Portable Power",
-        "comet_tab": "☄️ Comets",
-        "setup_header": "🛠️ Your Setup",
-        "orig": "Originality",
-        "expo": "Exposure",
-        "filter": "🧪 Filter Advice",
-        "batt_model": "Battery Model",
-        "batt_capa": "Capacity (Wh)",
-        "batt_cons": "Total Draw (W)",
-        "batt_res": "Estimated Runtime",
-        "export_btn": "📥 Download for ASIAIR (Plan)",
-        "sampling": "Sampling",
-    }
-}
+# --- FONCTION MÉTÉO RÉELLE (API GRATUITE) ---
+def get_live_weather(lat, lon):
+    try:
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&hourly=cloudcover,relativehumidity_2m,dewpoint_2m"
+        r = requests.get(url).json()
+        current = r['current_weather']
+        hourly = r['hourly']
+        return {
+            "temp": current['temperature'],
+            "clouds": hourly['cloudcover'][0],
+            "hum": hourly['relativehumidity_2m'][0],
+            "dew": hourly['dewpoint_2m'][0],
+            "wind": current['windspeed']
+        }
+    except:
+        return None
 
-# --- BARRE LATÉRALE : LANGUE ET MATÉRIEL ---
-lang = st.sidebar.radio("Language / Langue", ["fr", "en"])
-T = TEXTS["fr"] if lang == "fr" else TEXTS["en"]
+# --- SIDEBAR : POSITION ET MATÉRIEL ---
+st.sidebar.title("🌍 Ma Position & Setup")
+user_lat = st.sidebar.number_input("Latitude", value=46.0, format="%.4f")
+user_lon = st.sidebar.number_input("Longitude", value=6.0, format="%.4f")
+min_alt = st.sidebar.slider("Masque d'Horizon (Altitude mini °)", 0, 60, 20)
 
-st.sidebar.header(T["setup_header"])
-TELESCOPES = {
-    "Skywatcher Evolux 62ED": (400, 62),
-    "RedCat 51": (250, 51),
-    "Skywatcher 72ED": (420, 72),
-    "Esprit 100ED": (550, 100),
-    "Newton 200/800": (800, 200),
-    "Custom / Manuel": (0, 0)
-}
-CAMERAS = {
-    "ZWO ASI 183MC (Pixels 2.4µm)": (13.2, 8.8, 2.4, 84),
-    "ZWO ASI 2600MC (Pixels 3.76µm)": (23.5, 15.7, 3.76, 80),
-    "ZWO ASI 533MC (Pixels 3.76µm)": (11.3, 11.3, 3.76, 80),
-    "Canon EOS R (Plein Format)": (36.0, 24.0, 5.3, 50),
-    "Custom / Manuel": (0, 0, 0, 0)
-}
+st.sidebar.markdown("---")
+TELESCOPES = {"Skywatcher Evolux 62ED": (400, 62), "RedCat 51": (250, 51), "Newton 200/800": (800, 200), "Custom": (400, 60)}
+CAMERAS = {"ASI 183MC": (13.2, 8.8, 2.4, 84), "ASI 2600MC": (23.5, 15.7, 3.76, 80), "Custom": (13.2, 8.8, 3.76, 80)}
 
 tube = st.sidebar.selectbox("Télescope", list(TELESCOPES.keys()))
 cam = st.sidebar.selectbox("Caméra", list(CAMERAS.keys()))
 
-if tube == "Custom / Manuel":
-    focale = st.sidebar.number_input("Focale (mm)", value=400)
-    diam = st.sidebar.number_input("Diamètre (mm)", value=60)
-else:
-    focale, diam = TELESCOPES[tube]
-
-if cam == "Custom / Manuel":
-    sw, sh, px, qe = st.sidebar.number_input("Sensor W", value=13.2), 8.8, st.sidebar.number_input("Pixel size", value=3.76), 80
-else:
-    sw, sh, px, qe = CAMERAS[cam]
-
-# Calculs techniques
+focale, diam = TELESCOPES[tube]
+sw, sh, px, qe = CAMERAS[cam]
 f_ratio = round(focale / diam, 2) if diam > 0 else 0
-res = round((px * 206) / focale, 2) if focale > 0 else 0
 fov_w = round((sw * 3438) / focale, 1) if focale > 0 else 0
 
 # --- APP PRINCIPALE ---
-st.title(T["title"])
-tabs = st.tabs([T["targets_tab"], T["weather_tab"], T["power_tab"], T["comet_tab"]])
+st.title("🔭 AstroPépites Pro")
 
-# --- TAB 1 : RADAR DE CIBLES ---
+tabs = st.tabs(["💎 Radar de Pépites", "☁️ Météo en Direct", "🔋 Énergie", "☄️ Comètes"])
+
+# --- TAB 1 : CIBLES AVEC MASQUE D'HORIZON ---
 with tabs[0]:
     db = [
-        {"name": "Sh2-157 (Lobster Claw)", "ra": "23:16:04", "dec": "+60:02:06", "type": "Emission", "size": 60, "cat": "Rare"},
-        {"name": "vdB 141 (Ghost Nebula)", "ra": "21:16:29", "dec": "+68:15:51", "type": "Reflection", "size": 15, "cat": "Expert"},
-        {"name": "Arp 273 (Galaxy Rose)", "ra": "02:21:28", "dec": "+39:22:32", "type": "Galaxy", "size": 5, "cat": "Extreme"},
+        {"name": "Sh2-157 (Lobster)", "ra": "23:16:04", "dec": "+60:02:06", "type": "Emission", "size": 60, "cat": "Rare"},
+        {"name": "vdB 141 (Ghost)", "ra": "21:16:29", "dec": "+68:15:51", "type": "Reflection", "size": 15, "cat": "Expert"},
+        {"name": "Arp 273 (Rose)", "ra": "02:21:28", "dec": "+39:22:32", "type": "Galaxy", "size": 5, "cat": "Extreme"},
         {"name": "Abell 21 (Medusa)", "ra": "07:29:02", "dec": "+13:14:48", "type": "Planetary", "size": 12, "cat": "Rare"},
-        {"name": "LDN 1235 (Shark Nebula)", "ra": "22:13:14", "dec": "+73:14:41", "type": "Dark", "size": 50, "cat": "Rare"},
-        {"name": "NGC 7635 (Bubble Nebula)", "ra": "23:20:48", "dec": "+61:12:06", "type": "Emission", "size": 15, "cat": "NGC"},
+        {"name": "LDN 1235 (Shark)", "ra": "22:13:14", "dec": "+73:14:41", "type": "Dark", "size": 50, "cat": "Rare"},
     ]
     
     now = Time.now()
-    loc = EarthLocation(lat=45*u.deg, lon=5*u.deg) 
-    
-    try:
-        moon_pos = get_body("moon", now)
-    except:
-        moon_pos = None
+    loc = EarthLocation(lat=user_lat*u.deg, lon=user_lon*u.deg)
+    try: moon_pos = get_body("moon", now)
+    except: moon_pos = None
 
     results = []
     for t in db:
         coord = SkyCoord(t['ra'], t['dec'], unit=(u.hourangle, u.deg))
         altaz = coord.transform_to(AltAz(obstime=now, location=loc))
         
-        if altaz.alt.deg > 10:
-            # Filtre Expert par marque
-            if t['type'] == "Emission":
-                f_advice = "Dual-Band (Antlia ALP-T / Optolong L-Ultimate)"
-            elif t['type'] == "Reflection" or t['type'] == "Dark":
-                f_advice = "RGB Pur (Optolong L-Pro / Antlia Triband)"
-            else:
-                f_advice = "UV/IR Cut (ZWO / Astronomik)"
-            
-            # Temps de pose selon F/D
+        # APPLICATION DU MASQUE D'HORIZON
+        if altaz.alt.deg > min_alt:
+            dist_lune = f"{round(coord.separation(moon_pos).deg)}°" if moon_pos else "N/A"
             integration = round(4 * (f_ratio/4)**2 * (80/qe), 1) if f_ratio > 0 else 0
             
             results.append({
                 "Aperçu": f"https://skyview.gsfc.nasa.gov/current/cgi/runquery.pl?survey=DSS2%20Red&position={t['ra']},{t['dec']}&size=0.3&pixels=200&return=jpg",
                 "Nom": t['name'],
-                T["orig"]: "💎 High" if t['cat'] != "NGC" else "⭐ Standard",
-                "Alt": f"{round(altaz.alt.deg)}°",
-                T["filter"]: f_advice,
-                T["expo"]: f"{integration}h",
-                "Cadrage": f"{round((t['size']/fov_w)*100)}%" if fov_w > 0 else "0%",
-                "ra": t['ra'], "dec": t['dec'] # colonnes pour l'export
+                "Altitude": f"{round(altaz.alt.deg)}°",
+                "Filtre": "Dual-Band" if t['type'] == "Emission" else "RGB Pur",
+                "Lune": dist_lune,
+                "Expo": f"{integration}h",
+                "Cadrage": f"{round((t['size']/fov_w)*100)}%",
+                "ra": t['ra'], "dec": t['dec']
             })
 
     if results:
         df = pd.DataFrame(results)
         st.data_editor(df.drop(columns=['ra', 'dec']), column_config={"Aperçu": st.column_config.ImageColumn()}, hide_index=True)
-        
-        # --- EXPORT ASIAIR ---
+        # Export ASIAIR
         export_df = df[["Nom", "ra", "dec"]]
         export_df.columns = ["Name", "RA", "Dec"]
-        csv_data = export_df.to_csv(index=False).encode('utf-8')
-        st.download_button(T["export_btn"], csv_data, "plan_asiair.csv", "text/csv")
+        st.download_button("📥 Télécharger pour ASIAIR", export_df.to_csv(index=False).encode('utf-8'), "plan_asiair.csv")
     else:
-        st.write("Aucune cible visible.")
+        st.warning(f"Aucune cible au-dessus de ton horizon ({min_alt}°).")
 
-# --- TAB 2 : MÉTÉO ---
+# --- TAB 2 : VRAIE MÉTÉO ---
 with tabs[1]:
-    st.write("🛰️ *Données Météo Astro (Open-Meteo API)*")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Clouds / Nuages", "12%")
-    c2.metric("Humidity / Humidité", "75%")
-    c3.metric("Seeing", "1.1\" (Excellent)")
+    w = get_live_weather(user_lat, user_lon)
+    if w:
+        st.write(f"### 🛰️ Ciel au-dessus de : {user_lat}, {user_lon}")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Nuages", f"{w['clouds']}%")
+        c2.metric("Humidité", f"{w['hum']}%")
+        c3.metric("Point de Rosée", f"{w['dew']}°C")
+        c4.metric("Vent", f"{w['wind']} km/h")
+        
+        if w['clouds'] > 30: st.error("☁️ Risque de nuages élevé.")
+        if w['hum'] > 85: st.warning("💧 Humidité forte : Attention à la buée !")
+    else:
+        st.error("Impossible de récupérer la météo.")
 
 # --- TAB 3 : ÉNERGIE ---
 with tabs[2]:
-    st.subheader("🔋 " + T["power_tab"])
-    MODEL_BATT = {
-        "Bluetti EB3A (268Wh)": 268,
-        "Jackery Explorer 240": 240,
-        "EcoFlow River 2 (256Wh)": 256,
-        "Jackery Explorer 500": 518,
-        "Bluetti EB55 (537Wh)": 537,
-        "Batterie Voiture 60Ah": 360,
-        "Autre / Manuel": 0
-    }
-    choix_b = st.selectbox(T["batt_model"], list(MODEL_BATT.keys()))
-    capa = st.number_input(T["batt_capa"], value=MODEL_BATT[choix_b]) if choix_b == "Autre / Manuel" else MODEL_BATT[choix_b]
-    
-    st.write("---")
-    c_a, c_b = st.columns(2)
-    with c_a:
-        p_mount = st.slider("Monture (W)", 5, 20, 10)
-        p_cam = st.slider("Camera TEC (W)", 0, 35, 20)
-    with c_b:
-        p_pc = st.slider("ASIAIR/MiniPC (W)", 5, 25, 10)
-        p_dew = st.slider("Résistances (W)", 0, 30, 10)
-    
-    total_w = p_mount + p_cam + p_pc + p_dew
-    autonomie = (capa * 0.9) / total_w if total_w > 0 else 0
-    st.metric(T["batt_res"], f"{round(autonomie, 1)} h")
-
-# --- TAB 4 : COMÈTES ---
-with tabs[3]:
-    st.subheader(T["comet_tab"])
-    v_comet = st.number_input("Vitesse apparente (arcsec/min)", value=1.0)
-    max_p = res / (v_comet / 60) if v_comet > 0 else 0
-    st.error(f"⏱️ {T['comet_warn']} : {round(max_p, 1)} secondes")
-
-# FOOTER
-st.sidebar.markdown("---")
-st.sidebar.write(f"**{T['sampling']} :** {res}\"/px")
-st.sidebar.write(f"**Field / Champ :** {fov_w}'")
+    st.subheader("🔋 Consommation Batterie")
+    wh = st.number_input("Capacité Batterie (Wh)", value=240)
+    conso = st.slider("Consommation Totale (Monture + Caméra + PC) en Watts", 10, 100, 40)
+    autonomie = (wh * 0.9) / conso
+    st.metric("Heures d'autonomie", f"{round(autonomie, 1)} h")
