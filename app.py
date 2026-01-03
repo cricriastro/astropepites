@@ -13,14 +13,12 @@ import json
 # =========================
 # CONFIGURATION API SÉCURISÉE (via st.secrets)
 # =========================
-# Les clés seront lues depuis le fichier secrets.toml sur Streamlit Cloud
 try:
     OPENWEATHER_API_KEY = st.secrets["openweather"]["api_key"]
     NASA_API_KEY = st.secrets["nasa"]["api_key"]
 except KeyError as e:
     st.error(f"Erreur de configuration des secrets: Clé manquante {e}. Avez-vous configuré secrets.toml ?")
     st.stop()
-
 
 # =========================
 # CONFIG PAGE & STYLE
@@ -55,9 +53,38 @@ location = EarthLocation(lat=lat*u.deg, lon=lon*u.deg)
 now = Time.now()
 
 # =========================
-# MASQUE HORIZON (placeholders)
+# MASQUE HORIZON
 # =========================
-def get_horizon_limit(az): return 15 # Placeholder simple
+st.sidebar.header("🌲 Masque Horizon")
+use_csv = st.sidebar.checkbox("Importer un CSV horizon")
+csv_horizon = None
+if use_csv:
+    file = st.sidebar.file_uploader("Fichier (azimuth,altitude)", type="csv")
+    if file: csv_horizon = pd.read_csv(file)
+
+with st.sidebar.expander("Réglage manuel", expanded=not use_csv):
+    m_vals = [st.slider(f"{d}", 0, 90, 15) for d in ["Nord", "NE", "Est", "SE", "Sud", "SW", "Ouest", "NW"]]
+
+def get_horizon_limit(az):
+    if csv_horizon is not None:
+        return np.interp(az, csv_horizon.iloc[:,0], csv_horizon.iloc[:,1])
+    idx = int(((az + 22.5) % 360) // 45)
+    return m_vals[idx]
+
+# Boussole Horizon (Corrigée et Robuste)
+angles = np.linspace(0, 2*np.pi, 8, endpoint=False)
+fig_pol, ax_pol = plt.subplots(figsize=(3,3), subplot_kw={"projection":"polar"})
+ax_pol.set_theta_zero_location("N")
+ax_pol.set_theta_direction(-1)
+angles_closed, m_vals_closed = np.append(angles, angles[0]), np.append(m_vals, m_vals[0])
+ax_pol.fill(angles_closed, m_vals_closed, color="red", alpha=0.4)
+ax_pol.fill_between(angles_closed, m_vals_closed, 90, color="green", alpha=0.2)
+ax_pol.set_yticklabels([])
+ax_pol.set_xticklabels(["N", "NE", "E", "SE", "S", "SW", "W", "NW"])
+ax_pol.set_facecolor("black")
+fig_pol.patch.set_facecolor("black")
+st.sidebar.pyplot(fig_pol)
+
 
 # =========================
 # CATALOGUES PRO & BASE DE DONNÉES D'OBJETS
@@ -77,13 +104,18 @@ TELESCOPES_DB = {"SW Evolux 62 ED + Reducteur 0.85x": {"focal_length": 340, "ape
 TELESCOPE_OPTIONS = list(TELESCOPES_DB.keys())
 CAMERAS_DB = {"ZWO ASI 183 MC Pro": {"sensor_width_mm": 13.2, "sensor_height_mm": 8.8, "pixel_size_um": 2.4}}
 CAMERA_OPTIONS = list(CAMERAS_DB.keys())
-def calculate_fov(focal_length_mm, sensor_size_mm): return 1.0 
+
+# =========================
+# FONCTIONS UTILITAIRES
+# =========================
+def calculate_fov(focal_length_mm, sensor_size_mm):
+    """Calcule le champ de vision en degrés."""
+    return (sensor_size_mm / focal_length_mm) * (180 / np.pi)
 
 
 # =========================
 # FONCTIONS API D'IMAGES (NASA)
 # =========================
-
 def get_nasa_image_url(target_name):
     """Recherche la première image de la cible dans la bibliothèque NASA et retourne son URL."""
     params = {'q': target_name, 'media_type': 'image'}
@@ -91,19 +123,14 @@ def get_nasa_image_url(target_name):
         response = requests.get('images-api.nasa.gov', params=params)
         data = response.json()
         if data['collection']['metadata']['total_hits'] > 0:
-            # Obtient l'URL de la collection de liens
-            image_links_url = data['collection']['items'][0]['href']
-            # Fait un second appel pour obtenir les URLs réelles des images
+            image_links_url = data['collection']['items']['href']
             links_response = requests.get(image_links_url)
             links_data = links_response.json()
-            # Cherche la première URL qui finit par .jpg ou .png
             for link in links_data:
                 if link.endswith('.jpg') or link.endswith('.png'):
                     return link
-    except requests.exceptions.RequestException as e:
-        st.sidebar.error(f"Erreur NASA API: {e}")
-    except (IndexError, KeyError) as e:
-        st.sidebar.error(f"Erreur de parsing NASA API: {e}")
+    except requests.exceptions.RequestException as e: st.sidebar.error(f"Erreur NASA API: {e}")
+    except (IndexError, KeyError) as e: st.sidebar.error(f"Erreur de parsing NASA API: {e}")
     return None
 
 
@@ -162,11 +189,8 @@ with tab2:
 
     st.subheader(f"Images réelles de {target_name} (Source NASA)")
     image_url = get_nasa_image_url(target_name)
-    
-    if image_url:
-        st.image(image_url, caption=f"Image de {target_name} (Source NASA API)", use_column_width=True)
-    else:
-        st.warning("Pas d'image disponible pour cette cible via l'API NASA.")
+    if image_url: st.image(image_url, caption=f"Image de {target_name} (Source NASA API)", use_column_width=True)
+    else: st.warning("Pas d'image disponible pour cette cible via l'API NASA.")
 
 
 # --- TAB 3 : MATÉRIEL & FOV ---
@@ -209,6 +233,7 @@ with tab4:
 # --- TAB 5 : EXPORTS ---
 with tab5:
     st.subheader("📋 Coordonnées pour votre monture")
-    st.code(f"TARGET: {target_name}\nRA: {coord.ra.to_string(unit=u.hour)}\nDEC: {coord.dec.to_string(unit=u.deg)}")
+    st.code(f"TARGET: {target_name}\nRA: {coord.ra.to_string(unit=u.hour)}\nDEC = {coord.dec.to_string(unit=u.deg)}"))
     df = pd.DataFrame([{"name":target_name, "ra":coord.ra.deg, "dec":coord.dec.deg, "alt":round(altaz.alt.deg,1), "az":round(altaz.az.deg,1)}])
     st.download_button("Télécharger CSV", df.to_csv(index=False), file_name="astropepites_target.csv")
+
