@@ -5,24 +5,22 @@ from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_body
 from astropy.time import Time
 import astropy.units as u
 from datetime import datetime, timedelta
+from streamlit_js_eval import streamlit_js_eval
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="AstroPépites Pro", layout="wide")
 
-# --- STYLE HAUTE VISIBILITÉ (VISION NOCTURNE OPTIMISÉE) ---
+# --- STYLE HAUTE VISIBILITÉ ---
 st.markdown("""
     <style>
     .stApp { background-color: #000000; color: #FFFFFF !important; }
     h1, h2, h3 { color: #FF0000 !important; font-weight: bold !important; }
-    /* Texte blanc pur pour une lisibilité totale */
-    .stMarkdown, label, p, span, div { color: #FFFFFF !important; font-size: 1.1rem !important; }
+    .stMarkdown, label, p, span, div { color: #FFFFFF !important; font-size: 1.1rem !important; font-weight: bold !important; }
     .stMetric { background-color: #1a0000; border: 2px solid #FF0000; border-radius: 12px; padding: 15px; }
     [data-testid="stMetricValue"] { color: #FF0000 !important; font-weight: bold !important; }
-    /* Style des onglets */
     .stTabs [data-baseweb="tab-list"] { background-color: #111; }
-    .stTabs [data-baseweb="tab"] { color: #FF0000 !important; font-size: 1.2rem !important; }
-    .stTabs [aria-selected="true"] { border-bottom: 3px solid #FF0000 !important; }
-    hr { border: 1px solid #333; }
+    .stTabs [data-baseweb="tab"] { color: #FF0000 !important; }
+    button { background-color: #FF0000 !important; color: white !important; font-weight: bold !important; border-radius: 8px !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -36,16 +34,26 @@ def get_live_weather(lat, lon):
 
 # --- SIDEBAR ---
 st.sidebar.title("🔭 AstroPépites Pro")
-lang = st.sidebar.radio("Langue / Language", ["Français", "English"])
-T = "fr" if lang == "Français" else "en"
 
-st.sidebar.header("📍 Position & Horizon")
-u_lat = st.sidebar.number_input("Latitude", value=46.80, format="%.2f")
-u_lon = st.sidebar.number_input("Longitude", value=7.10, format="%.2f")
+# --- FONCTION GPS AUTOMATIQUE ---
+st.sidebar.header("📍 Géolocalisation")
+if st.sidebar.button("🛰️ Cliquer pour activer le GPS"):
+    loc_js = streamlit_js_eval(data_key='pos', function_name='getCurrentPosition')
+    if loc_js:
+        st.session_state.lat = loc_js['coords']['latitude']
+        st.session_state.lon = loc_js['coords']['longitude']
+        st.sidebar.success(f"Position GPS captée !")
+
+# Valeurs par défaut ou session
+lat_init = st.session_state.get('lat', 46.80)
+lon_init = st.session_state.get('lon', 7.10)
+
+u_lat = st.sidebar.number_input("Latitude", value=lat_init, format="%.4f")
+u_lon = st.sidebar.number_input("Longitude", value=lon_init, format="%.4f")
 h_mask = st.sidebar.slider("Masque d'Horizon (°)", 0, 60, 25)
 
 st.sidebar.header("📸 Matériel")
-TELESCOPES = {"Evolux 62ED": (400, 62), "RedCat 51": (250, 51), "Newton 200/800": (800, 200), "Custom": (400, 60)}
+TELESCOPES = {"Evolux 62ED": (400, 62), "RedCat 51": (250, 51), "Newton 200/800": (800, 200), "Esprit 100": (550, 100)}
 CAMERAS = {"ASI 183MC": (13.2, 8.8, 2.4, 84), "ASI 2600MC": (23.5, 15.7, 3.76, 80)}
 
 tube = st.sidebar.selectbox("Mon Tube", list(TELESCOPES.keys()))
@@ -54,21 +62,19 @@ cam = st.sidebar.selectbox("Ma Caméra", list(CAMERAS.keys()))
 focale, diam = TELESCOPES[tube]
 sw, sh, px, qe = CAMERAS[cam]
 f_ratio = round(focale / diam, 2)
-res = round((px * 206) / focale, 2)
 fov_w = round((sw * 3438) / focale, 1)
+res = round((px * 206) / focale, 2)
 
-# --- APP ---
+# --- APP PRINCIPALE ---
 st.title("🔭 AstroPépites Pro")
 tab1, tab2, tab3, tab4 = st.tabs(["💎 Radar", "☁️ Météo", "🔋 Batterie", "☄️ Comètes"])
 
-# --- TAB 1 : RADAR (CIBLES) ---
 with tab1:
     db = [
         {"name": "Sh2-157 (Lobster)", "ra": "23:16:04", "dec": "+60:02:06", "type": "Emission", "size": 60},
         {"name": "vdB 141 (Ghost)", "ra": "21:16:29", "dec": "+68:15:51", "type": "Reflection", "size": 15},
         {"name": "Arp 273 (Rose)", "ra": "02:21:28", "dec": "+39:22:32", "type": "Galaxy", "size": 10},
         {"name": "LDN 1235 (Shark)", "ra": "22:13:14", "dec": "+73:14:41", "type": "Dark", "size": 50},
-        {"name": "Abell 21 (Medusa)", "ra": "07:29:02", "dec": "+13:14:48", "type": "Planetary", "size": 12},
     ]
 
     now = Time.now()
@@ -82,30 +88,22 @@ with tab1:
         
         if altaz.alt.deg > h_mask:
             col1, col2, col3 = st.columns([1.5, 2, 1.2])
-            
             with col1:
-                # NOUVELLE MÉTHODE IMAGE : LIEN DIRECT HAUTE FIABILITÉ
-                ra_deg, dec_deg = coord.ra.deg, coord.dec.deg
-                img_url = f"https://aladin.u-strasbg.fr/AladinLite/api/v1/preview?ra={ra_deg}&dec={dec_deg}&fov=1.0&width=300&height=300"
+                # Lien image haute fiabilité
+                img_url = f"https://aladin.u-strasbg.fr/AladinLite/api/v1/preview?ra={coord.ra.deg}&dec={coord.dec.deg}&fov=1.0&width=300&height=300"
                 st.image(img_url, caption=t['name'], use_container_width=True)
-                st.write(f"🔗 [Fiche Telescopius](https://telescopius.com/deep-sky/object/{t['name'].replace(' ', '-')})")
-
             with col2:
                 st.subheader(t['name'])
-                st.write(f"📍 **Altitude :** {round(altaz.alt.deg)}°")
-                st.write(f"✨ **Filtre :** {'Dual-Band (Hα/OIII)' if t['type'] in ['Emission', 'Planetary'] else 'RGB Pur'}")
-                st.write(f"🖼️ **Cadrage :** {round((t['size']/fov_w)*100)}% du champ")
-                st.write(f"🔬 **Échantillonnage :** {res} \"/px")
-            
+                st.write(f"📍 Altitude : {round(altaz.alt.deg)}°")
+                st.write(f"✨ Filtre : {'Dual-Band' if t['type']=='Emission' else 'RGB Pur'}")
+                st.write(f"🖼️ Cadrage : {round((t['size']/fov_w)*100)}% du champ")
             with col3:
                 integration = round(4 * (f_ratio/4)**2 * (80/qe), 1)
                 st.metric("Temps total", f"{integration}h")
                 if moon_pos:
-                    m_dist = round(coord.separation(moon_pos).deg)
-                    st.write(f"🌙 Lune à {m_dist}°")
+                    st.write(f"🌙 Lune à {round(coord.separation(moon_pos).deg)}°")
             st.markdown("---")
 
-# --- TAB 2 : MÉTÉO ---
 with tab2:
     w = get_live_weather(u_lat, u_lon)
     if w:
@@ -114,21 +112,15 @@ with tab2:
         c1.metric("Nuages", f"{w['hourly']['cloudcover'][0]}%")
         c2.metric("Humidité", f"{w['hourly']['relativehumidity_2m'][0]}%")
         c3.metric("Temp", f"{w['current_weather']['temperature']}°C")
-    else: st.error("Serveur météo indisponible.")
 
-# --- TAB 3 : BATTERIE ---
 with tab3:
-    st.subheader("🔋 Calculateur Batterie")
-    BATT = {"Bluetti EB3A": 268, "EcoFlow River 2": 256, "Jackery 240": 240, "Batterie 60Ah": 360, "Custom": 0}
-    choix = st.selectbox("Ma Batterie", list(BATT.keys()))
-    capa = st.number_input("Wh", value=BATT[choix]) if choix == "Custom" else BATT[choix]
-    conso = st.slider("Conso totale (Watts)", 10, 100, 35)
-    st.metric("Autonomie", f"{round((capa*0.9)/conso, 1)} h")
+    st.subheader("🔋 Batterie")
+    wh = st.number_input("Wh", value=240)
+    conso = st.slider("Watts", 10, 100, 35)
+    st.metric("Autonomie", f"{round((wh*0.9)/conso, 1)} h")
 
-# --- TAB 4 : COMÈTES ---
 with tab4:
-    st.subheader("☄️ Assistant Comètes")
-    v_c = st.number_input("Vitesse comète (arcsec/min)", value=1.0)
-    max_exp = res / (v_c / 60)
-    st.metric("Temps de pose MAX", f"{round(max_exp, 1)} s")
-    st.info("💡 Cherchez la vitesse 'Motion' dans Stellarium.")
+    st.subheader("☄️ Comètes")
+    v_c = st.number_input("Vitesse (arcsec/min)", value=1.0)
+    max_p = res / (v_c / 60)
+    st.metric("Pose MAX", f"{round(max_p, 1)} s")
