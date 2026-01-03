@@ -53,38 +53,9 @@ location = EarthLocation(lat=lat*u.deg, lon=lon*u.deg)
 now = Time.now()
 
 # =========================
-# MASQUE HORIZON
+# MASQUE HORIZON (placeholders)
 # =========================
-st.sidebar.header("🌲 Masque Horizon")
-use_csv = st.sidebar.checkbox("Importer un CSV horizon")
-csv_horizon = None
-if use_csv:
-    file = st.sidebar.file_uploader("Fichier (azimuth,altitude)", type="csv")
-    if file: csv_horizon = pd.read_csv(file)
-
-with st.sidebar.expander("Réglage manuel", expanded=not use_csv):
-    m_vals = [st.slider(f"{d}", 0, 90, 15) for d in ["Nord", "NE", "Est", "SE", "Sud", "SW", "Ouest", "NW"]]
-
-def get_horizon_limit(az):
-    if csv_horizon is not None:
-        return np.interp(az, csv_horizon.iloc[:,0], csv_horizon.iloc[:,1])
-    idx = int(((az + 22.5) % 360) // 45)
-    return m_vals[idx]
-
-# Boussole Horizon (Corrigée et Robuste)
-angles = np.linspace(0, 2*np.pi, 8, endpoint=False)
-fig_pol, ax_pol = plt.subplots(figsize=(3,3), subplot_kw={"projection":"polar"})
-ax_pol.set_theta_zero_location("N")
-ax_pol.set_theta_direction(-1)
-angles_closed, m_vals_closed = np.append(angles, angles[0]), np.append(m_vals, m_vals[0])
-ax_pol.fill(angles_closed, m_vals_closed, color="red", alpha=0.4)
-ax_pol.fill_between(angles_closed, m_vals_closed, 90, color="green", alpha=0.2)
-ax_pol.set_yticklabels([])
-ax_pol.set_xticklabels(["N", "NE", "E", "SE", "S", "SW", "W", "NW"])
-ax_pol.set_facecolor("black")
-fig_pol.patch.set_facecolor("black")
-st.sidebar.pyplot(fig_pol)
-
+def get_horizon_limit(az): return 15 
 
 # =========================
 # CATALOGUES PRO & BASE DE DONNÉES D'OBJETS
@@ -109,7 +80,6 @@ CAMERA_OPTIONS = list(CAMERAS_DB.keys())
 # FONCTIONS UTILITAIRES
 # =========================
 def calculate_fov(focal_length_mm, sensor_size_mm):
-    """Calcule le champ de vision en degrés."""
     return (sensor_size_mm / focal_length_mm) * (180 / np.pi)
 
 
@@ -117,7 +87,6 @@ def calculate_fov(focal_length_mm, sensor_size_mm):
 # FONCTIONS API D'IMAGES (NASA)
 # =========================
 def get_nasa_image_url(target_name):
-    """Recherche la première image de la cible dans la bibliothèque NASA et retourne son URL."""
     params = {'q': target_name, 'media_type': 'image'}
     try:
         response = requests.get('images-api.nasa.gov', params=params)
@@ -233,7 +202,7 @@ with tab4:
 # --- TAB 5 : EXPORTS ---
 with tab5:
     st.subheader("📋 Coordonnées pour votre monture")
-    st.code(f"TARGET: {target_name}\nRA: {coord.ra.to_string(unit=u.hour)}\nDEC = {coord.dec.to_string(unit=u.deg)}"))
+    st.code(f"TARGET: {target_name}\nRA: {coord.ra.to_string(unit=u.hour)}\nDEC = {coord.dec.to_string(unit=u.deg)}")
     df = pd.DataFrame([{"name":target_name, "ra":coord.ra.deg, "dec":coord.dec.deg, "alt":round(altaz.alt.deg,1), "az":round(altaz.az.deg,1)}])
     st.download_button("Télécharger CSV", df.to_csv(index=False), file_name="astropepites_target.csv")
 
