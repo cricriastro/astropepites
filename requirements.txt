@@ -2,6 +2,6 @@ streamlit
 numpy
 pandas
 matplotlib
-astropy==5.3.4
+astropy
 streamlit-js-eval
 requests
