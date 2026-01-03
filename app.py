@@ -3,8 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# --- Importations astropy simplifiées et robustes ---
-# Nous utilisons seulement ce qui est nécessaire pour éviter les erreurs d'importation spécifiques
+# --- Importations astropy robustes ---
 from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_body
 from astropy.time import Time
 import astropy.units as u
@@ -37,7 +36,6 @@ loc = streamlit_js_eval(
     delay=100
 )
 
-# Valeurs par défaut sécurisées
 if loc:
     st.session_state.lat = loc["coords"]["latitude"]
     st.session_state.lon = loc["coords"]["longitude"]
@@ -163,7 +161,7 @@ with tab1:
 # =========================
 with tab2:
     st.subheader("☄️ Comètes (calcul temps réel)")
-    # Utilisation de get_body pour Mars, Lune et Soleil (plus robuste)
+    # Méthode robuste: utiliser get_body() pour tous les corps célestes
     mars = get_body("mars", now) 
     altaz_mars = mars.transform_to(AltAz(obstime=now,location=location))
     st.write(f"Exemple Mars (test gratuit) – Alt {altaz_mars.alt:.1f}")
