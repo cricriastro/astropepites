@@ -6,7 +6,6 @@ from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_body
 from astropy.time import Time
 import astropy.units as u
 from datetime import datetime, timedelta
-# from streamlit_js_eval import streamlit_js_eval # Non utilisé pour ces fonctions
 
 # =========================
 # CONFIG PAGE & STYLE
@@ -29,8 +28,9 @@ h1, h2, h3 { color: #ff4444 !important; }
 st.sidebar.title("🔭 AstroPépites Pro")
 default_lat, default_lon = 46.8, 7.1
 
-lat = st.sidebar.number_input("Latitude", value=st.session_state.get("lat", default_lat), format="%.4f")
-lon = st.sidebar.number_input("Longitude", value=st.session_state.get("lon", default_lon), format="%.4f")
+# Simplified location input for stability
+lat = st.sidebar.number_input("Latitude", value=default_lat, format="%.4f")
+lon = st.sidebar.number_input("Longitude", value=default_lon, format="%.4f")
 location = EarthLocation(lat=lat*u.deg, lon=lon*u.deg)
 now = Time.now()
 
@@ -38,28 +38,25 @@ now = Time.now()
 # MASQUE HORIZON (omitted for brevity, assume it's there and correct)
 # ... (votre code boussole/horizon ici) ...
 def get_horizon_limit(az):
-    m_vals = [15,15,20,30,15,15,20,15] # Simplified for this example
+    # Simplified for this example, ensure your actual code is complete
+    m_vals = [15,15,20,30,15,15,20,15] 
     idx = int(((az + 22.5) % 360) // 45)
     return m_vals[idx]
 
 # =========================
 # CATALOGUES PRO & BASE DE DONNÉES D'OBJETS
 # =========================
-# Ajout de plus d'objets pour étendre le catalogue
 catalog_pro = [
     {"name":"M31 Andromède","ra":"00:42:44","dec":"+41:16:09","type":"Galaxie", "size_arcmin": 180*60, "conseil":"Idéale pour grande focale.", "image_url":"https://example.com/m31.jpg"},
     {"name":"M42 Orion","ra":"05:35:17","dec":"-05:23:28","type":"Nébuleuse", "size_arcmin": 60*60, "conseil":"Centre très lumineux.", "image_url":"https://example.com/m42.jpg"},
     {"name":"M51 Whirlpool","ra":"13:29:52","dec":"+47:11:43","type":"Galaxie", "size_arcmin": 11*60, "conseil":"Nécessite une bonne focale.", "image_url":"https://example.com/m51.jpg"},
-    {"name":"M13 Hercules","ra":"16:41:41","dec":"+36:27:37","type":"Amas Globulaire", "size_arcmin": 20*60, "conseil":"Très facile à imager.", "image_url":"https://example.com/m13.jpg"},
-    {"name":"NGC 7000 North America","ra":"20:58:54","dec":"+44:19:00","type":"Nébuleuse", "size_arcmin": 120*60, "conseil":"Énorme. Idéale grand champ.", "image_url":"https://example.com/ngc7000.jpg"},
     {"name":"NGC 891","ra":"02:22:33","dec":"+42:20:50","type":"Galaxie", "size_arcmin": 13*60, "conseil":"Galaxie de profil, peu lumineuse.", "image_url":"https://example.com/ngc891.jpg"},
 ]
-popular_targets = ["M31 Andromède", "M42 Orion", "NGC 7000 North America"]
+popular_targets = ["M31 Andromède", "M42 Orion"]
 
 # =========================
 # BASES DE DONNÉES MATÉRIEL (Télescopes & Caméras)
 # =========================
-# ... (Votre code TELESCOPES_DB et CAMERAS_DB) ...
 TELESCOPES_DB = {
     "SW Evolux 62 ED + Reducteur 0.85x": {"focal_length": 340, "aperture": 62},
     "Sky-Watcher Evolux 62 ED": {"focal_length": 400, "aperture": 62},
@@ -70,6 +67,14 @@ CAMERAS_DB = {
     "ZWO ASI 2600 MC Pro": {"sensor_width_mm": 23.5, "sensor_height_mm": 15.7, "pixel_size_um": 3.8},
 }
 CAMERA_OPTIONS = list(CAMERAS_DB.keys())
+
+
+# =========================
+# FONCTIONS UTILITAIRES (DÉPLACÉES ICI POUR ÉVITER LE NAMEERROR)
+# =========================
+def calculate_fov(focal_length_mm, sensor_size_mm):
+    """Calcule le champ de vision en degrés."""
+    return (sensor_size_mm / focal_length_mm) * (180 / np.pi)
 
 
 # =========================
@@ -91,7 +96,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(["💎 Cibles & Radar", "📷 Astrophoto 
 
 # --- TAB 1 : RADAR ---
 with tab1:
-    # Logique de filtrage basée sur les checkboxes de la sidebar
+    # ... (Logique de filtrage existante) ...
     filtered_names = []
     for o in catalog_pro:
         is_messier = o["name"].startswith("M")
@@ -102,12 +107,11 @@ with tab1:
             if not filter_rare or is_rare:
                 filtered_names.append(o["name"])
     
-    if use_comets:
-        filtered_names.append("C/2023 A3 (Tsuchinshan–ATLAS) [BETA]") # Exemple de comète
+    if use_comets: filtered_names.append("C/2023 A3 (Tsuchinshan–ATLAS) [BETA]")
 
     target_name = st.selectbox("Choisir une cible", filtered_names)
     
-    # Gérer la sélection de comète (qui n'est pas dans catalog_pro)
+    # Gérer la sélection de comète 
     if target_name.endswith("[BETA]"):
         obj = {"name": target_name, "ra": "00:00:00", "dec": "+00:00:00", "type": "Comète", "size_arcmin": 1, "conseil": "Les éphémérides doivent être mises à jour manuellement pour l'instant."}
         coord = SkyCoord(0*u.deg, 0*u.deg) # Placeholder coord
@@ -130,42 +134,59 @@ with tab1:
     with col2:
         times = now + np.linspace(0,12,30)*u.hour
         alts=[coord.transform_to(AltAz(obstime=t,location=location)).alt.deg for t in times]
-        chart_data = pd.DataFrame({"Altitude":alts}) # Removed horizon line for simplicity
+        chart_data = pd.DataFrame({"Altitude":alts}) 
         st.line_chart(chart_data)
 
-# --- TAB 2 : ASTROPHOTO INFOS (Ajout d'image) ---
+# --- TAB 2 : ASTROPHOTO INFOS ---
 with tab2:
     st.subheader(f"Conseils d'imagerie pour {target_name}")
     st.info(f"{obj['conseil']}")
-
-    # Affichage d'une image (URL factice pour l'exemple)
     if 'image_url' in obj:
-        # Remplacez cette URL par une vraie URL d'image (NASA API, Astrobin, etc.)
-        st.image(obj['image_url'], caption=f"Image de {target_name} (Source: API NASA/Astrobin)", use_column_width=True)
-    else:
-        st.warning("Pas d'image disponible pour cette cible (API non connectée).")
-
-    st.subheader("Guides génériques")
-    st.write("Pour les objets profonds (deep-sky), le secret réside dans l'accumulation de données (longues poses).")
+        st.warning("Pas d'image réelle disponible pour l'instant (API non connectée).")
 
 
-# --- TAB 3 : MATÉRIEL & FOV (inchangé dans la logique) ---
+# --- TAB 3 : MATÉRIEL & FOV ---
 with tab3:
     st.subheader("Configuration d'imagerie et Champ de Vision (FOV)")
     col_scope, col_cam = st.columns(2)
     with col_scope: selected_scope = st.selectbox("Télescope principal", TELESCOPE_OPTIONS, index=0)
     with col_cam: selected_camera = st.selectbox("Caméra principale", CAMERA_OPTIONS, index=0)
-    scope_data, cam_data = TELESCOPES_DB[selected_scope], CAMERAS_DB[selected_camera]
+    
+    scope_data = TELESCOPES_DB[selected_scope]
+    cam_data = CAMERAS_DB[selected_camera]
+    
+    # Le code ci-dessous fonctionne maintenant car calculate_fov est défini plus haut
     focal_length = scope_data["focal_length"]
     fov_width_deg = calculate_fov(focal_length, cam_data["sensor_width_mm"])
-    # ... (code FOV existant) ...
+    fov_height_deg = calculate_fov(focal_length, cam_data["sensor_height_mm"])
+
     st.markdown(f"**Focale utilisée :** `{focal_length}mm`")
-    # ... (affichage métriques et recommandations mosaïque)
+    
+    col_fov1, col_fov2 = st.columns(2)
+    with col_fov1: st.metric("FOV Largeur", f"{fov_width_deg:.2f}° / {fov_width_deg*60:.0f}'")
+    with col_fov2: st.metric("FOV Hauteur", f"{fov_height_deg:.2f}° / {fov_height_deg*60:.0f}'")
+
+    target_size_arcmin = obj["size_arcmin"]
+    st.subheader(f"Recommandation Mosaïque pour {target_name}")
+    if target_size_arcmin > (fov_width_deg * 60) * 1.5: st.warning(f"⚠️ La cible est grande ({round(target_size_arcmin/60,1)}°)! Mosaïque 2x2 ou plus.")
+    else: st.success(f"✅ La cible devrait rentrer sans problème dans votre champ de vision actuel.")
+
 
 # --- TAB 4 : SYSTÈME SOLAIRE (inchangé) ---
 with tab4:
-   pass
+   st.subheader("☄️ Comètes (calcul temps réel)")
+   mars = get_body("mars", now) 
+   altaz_mars = mars.transform_to(AltAz(obstime=now,location=location))
+   st.write(f"Exemple Mars (test gratuit) – Alt {altaz_mars.alt:.1f}")
+
+   st.subheader("🌒 Éclipses 2026")
+   st.write("🔴 12 Août 2026 – Éclipse solaire (Europe)")
+   st.write("🌕 28 Août 2026 – Éclipse lunaire")
 
 # --- TAB 5 : EXPORTS (inchangé) ---
 with tab5:
-   pass
+    st.subheader("📋 Coordonnées pour votre monture")
+    st.code(f"TARGET: {target_name}\nRA: {coord.ra.to_string(unit=u.hour)}\nDEC: {coord.dec.to_string(unit=u.deg)}")
+    df = pd.DataFrame([{"name":target_name, "ra":coord.ra.deg, "dec":coord.dec.deg, "alt":round(altaz.alt.deg,1), "az":round(altaz.az.deg,1)}])
+    st.download_button("Télécharger CSV", df.to_csv(index=False), file_name="astropepites_target.csv")
+
