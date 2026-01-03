@@ -5,3 +5,4 @@ matplotlib
 astropy
 streamlit-js-eval
 requests
+tzlocal
