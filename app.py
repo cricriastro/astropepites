@@ -10,8 +10,8 @@ from datetime import datetime, timedelta
 from streamlit_js_eval import streamlit_js_eval
 import math
 
-# --- CONFIGURATION ---
-st.set_page_config(page_title="AstroPépites Pro v3.9", layout="wide")
+# --- CONFIGURATION DE LA PAGE ---
+st.set_page_config(page_title="AstroPépites Pro v4.0", layout="wide")
 
 # --- STYLE VISION NOCTURNE ---
 st.markdown("""
@@ -23,13 +23,13 @@ st.markdown("""
     [data-testid="stMetricValue"] { color: #FF3333 !important; font-weight: bold !important; }
     .stTabs [data-baseweb="tab-list"] { background-color: #111; border-radius: 10px; }
     .stTabs [data-baseweb="tab"] { color: #FF3333 !important; font-weight: bold !important; }
+    .stTabs [aria-selected="true"] { background-color: #FF3333 !important; color: #FFFFFF !important; border-radius: 8px; }
     .mosaic-alert { background-color: #331a00; border: 1px dashed #FF8800; padding: 10px; border-radius: 10px; color: #FF8800 !important; font-weight: bold; }
-    div[data-testid="stExpander"] { background-color: #0a0a0a; border: 1px solid #333; }
     hr { border: 1px solid #333; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR : GPS & BOUSSOLE ---
+# --- SIDEBAR & GPS ---
 st.sidebar.title("🔭 AstroPépites Pro")
 
 st.sidebar.header("📍 Ma Position")
@@ -42,7 +42,7 @@ if st.sidebar.button("🛰️ Capturer ma position GPS"):
 u_lat = st.sidebar.number_input("Latitude", value=st.session_state.get('lat', 46.80), format="%.4f")
 u_lon = st.sidebar.number_input("Longitude", value=st.session_state.get('lon', 7.10), format="%.4f")
 
-# BOUSSOLE ASIAIR
+# BOUSSOLE ASIAIR (MASQUE D'HORIZON)
 st.sidebar.header("🌲 Masque d'Horizon")
 with st.sidebar.expander("Réglage des obstacles", expanded=False):
     mN = st.slider("Nord", 0, 90, 15); mNE = st.slider("NE", 0, 90, 15)
@@ -82,46 +82,46 @@ f_ratio = focale / diam
 fov_w = (sw * 3438) / focale
 fov_h = (sh * 3438) / focale
 
-# --- BASE DE DONNÉES ---
+# --- BASE DE DONNÉES CIBLES ---
 db = []
 if f_messier:
-    db += [{"name": "M31 (Andromède)", "ra": "00:42:44", "dec": "+41:16:09", "type": "Galaxy", "size_w": 180, "size_h": 60, "cat": "Messier"},
-           {"name": "M42 (Orion)", "ra": "05:35:17", "dec": "-05:23:28", "type": "Emission", "size_w": 65, "size_h": 60, "cat": "Messier"}]
+    db += [{"name": "M31 (Andromède)", "ra": "00:42:44", "dec": "+41:16:09", "type": "Galaxy", "size_w": 180, "size_h": 60},
+           {"name": "M42 (Orion)", "ra": "05:35:17", "dec": "-05:23:28", "type": "Emission", "size_w": 65, "size_h": 60}]
 if f_rare:
-    db += [{"name": "Sh2-157 (Lobster)", "ra": "23:16:04", "dec": "+60:02:06", "type": "Emission", "size_w": 60, "size_h": 50, "cat": "Rare"},
-           {"name": "vdB 141 (Ghost)", "ra": "21:16:29", "dec": "+68:15:51", "type": "Reflection", "size_w": 15, "size_h": 15, "cat": "Rare"}]
+    db += [{"name": "Sh2-157 (Lobster)", "ra": "23:16:04", "dec": "+60:02:06", "type": "Emission", "size_w": 60, "size_h": 50},
+           {"name": "vdB 141 (Ghost)", "ra": "21:16:29", "dec": "+68:15:51", "type": "Reflection", "size_w": 15, "size_h": 15}]
 if f_ngc:
-    db += [{"name": "NGC 2237 (Rosette)", "ra": "06:32:19", "dec": "+05:03:12", "type": "Emission", "size_w": 80, "size_h": 80, "cat": "NGC"}]
+    db += [{"name": "NGC 2237 (Rosette)", "ra": "06:32:19", "dec": "+05:03:12", "type": "Emission", "size_w": 80, "size_h": 80}]
 
 # --- APP ---
-st.title("🔭 AstroPépites Pro v3.9")
-t_radar, t_meteo, t_batt = st.tabs(["💎 Radar & Cibles", "☁️ Météo Live", "🔋 Énergie"])
+st.title("🔭 AstroPépites Pro v4.0")
+t_radar, t_meteo, t_batt = st.tabs(["💎 Radar & Planning", "☁️ Météo Live", "🔋 Énergie"])
 
 now = Time.now(); obs_loc = EarthLocation(lat=u_lat*u.deg, lon=u_lon*u.deg)
 try: moon_pos = get_body("moon", now)
 except: moon_pos = None
 
+# --- TAB 1 : RADAR ---
 with t_radar:
     search = st.text_input("🔍 Rechercher une cible...", "")
-    
-    # Affichage des planètes en haut si coché
-    if f_planets:
+    targets_to_show = [t for t in db if search.lower() in t['name'].lower()]
+    selected_target = st.selectbox("🎯 Cible active (pour planning) :", ["Toutes"] + [o['name'] for o in targets_to_show])
+
+    if f_planets and search == "":
         for p in ["Jupiter", "Saturn", "Mars"]:
             p_c = get_body(p.lower(), now)
             altaz = p_c.transform_to(AltAz(obstime=now, location=obs_loc))
-            if altaz.alt.deg > h_mask:
+            limit = get_horizon_limit(altaz.az.deg)
+            if altaz.alt.deg > limit:
                 col1, col2, col3 = st.columns([1, 2, 1])
                 with col1: st.image(f"https://alasky.u-strasbg.fr/hips-image-services/hips2fits?hips=CDS%2FP%2FDSS2%2Fcolor&ra={p_c.ra.deg}&dec={p_c.dec.deg}&width=300&height=300&fov=0.1&format=jpg", use_container_width=True)
-                with col2: st.subheader(f"🪐 {p} (Planète)"); st.write(f"📍 Altitude : **{round(altaz.alt.deg)}°**")
+                with col2: st.subheader(f"🪐 {p}"); st.write(f"📍 Alt : **{round(altaz.alt.deg)}°** (Dégagé ✅)")
                 st.markdown("---")
 
-    # Affichage de la liste des cibles filtrées
-    for t in db:
-        if search.lower() not in t['name'].lower(): continue
-        
+    for t in targets_to_show:
         coord = SkyCoord(t['ra'], t['dec'], unit=(u.hourangle, u.deg))
         altaz = coord.transform_to(AltAz(obstime=now, location=obs_loc))
-        limit = get_horizon_limit(altaz.az.deg)
+        limit = get_horizon_limit(altaz.az.deg) # Correction du bug ici
         visible = altaz.alt.deg > limit
         
         col1, col2, col3 = st.columns([1.5, 2, 1.2])
@@ -132,44 +132,37 @@ with t_radar:
             status = "✅ DÉGAGÉ" if visible else f"❌ MASQUÉ (<{limit}°)"
             st.subheader(f"{t['name']} {status}")
             st.write(f"📍 Alt : **{round(altaz.alt.deg)}°** | ✨ Filtre : **{'Dual-Band' if t['type']=='Emission' else 'RGB'}**")
-            
-            with st.expander("📈 VOIR LE PLANNING & MOSAÏQUE"):
-                # Calcul Mosaïque
+            if selected_target == t['name'] or selected_target == "Toutes":
                 cadrage = round((t['size_w'] / fov_w) * 100)
                 if cadrage > 90:
-                    pw = math.ceil(t['size_w'] / (fov_w * 0.8))
-                    ph = math.ceil(t['size_h'] / (fov_h * 0.8))
+                    pw, ph = math.ceil(t['size_w']/(fov_w*0.8)), math.ceil(t['size_h']/(fov_h*0.8))
                     st.markdown(f'<div class="mosaic-alert">⚠️ MOSAÏQUE CONSEILLÉE : {pw} x {ph} panneaux</div>', unsafe_allow_html=True)
-                
-                # Courbe de visibilité
                 times = now + np.linspace(0, 12, 24) * u.hour
                 hours = [(datetime.now() + timedelta(hours=i*0.5)).strftime("%H:%M") for i in range(24)]
                 alts = [max(0, coord.transform_to(AltAz(obstime=ts, location=obs_loc)).alt.deg) for ts in times]
                 st.line_chart(pd.DataFrame({"Altitude": alts}, index=hours), color="#FF3333")
-
         with col3:
-            st.metric("Temps total", f"{round(4 * (f_ratio/4)**2 * (80/qe), 1)}h")
-            st.write(f"🌙 Lune à {round(coord.separation(moon_pos).deg) if moon_pos else 'N/A'}°")
-            clean_n = t['name'].split(' (')[0].lower().replace(' ', '-')
-            st.markdown(f"[🔗 Telescopius](https://telescopius.com/deep-sky/object/{clean_n})")
+            st.metric("Temps suggéré", f"{round(4 * (f_ratio/4)**2 * (80/qe), 1)}h")
+            if moon_pos: st.write(f"🌙 Lune à {round(coord.separation(moon_pos).deg)}°")
+            st.markdown(f"[🔗 Telescopius](https://telescopius.com/deep-sky/object/{t['name'].split(' (')[0].lower().replace(' ', '-')})")
         st.markdown("---")
 
+# --- TAB 2 : MÉTÉO ---
 with t_meteo:
     try:
-        w_url = f"https://api.open-meteo.com/v1/forecast?latitude={u_lat}&longitude={u_lon}&current_weather=true&hourly=cloudcover&timezone=auto"
+        w_url = f"https://api.open-meteo.com/v1/forecast?latitude={u_lat}&longitude={u_lon}&current_weather=true&hourly=cloudcover,relativehumidity_2m&timezone=auto"
         w = requests.get(w_url).json()
-        st.subheader(f"☁️ Prévisions Nuages (%)")
-        df_w = pd.DataFrame({"Heure": [d[11:16] for d in w['hourly']['time'][:24]], "Nuages": w['hourly']['cloudcover'][:24]}).set_index("Heure")
+        df_w = pd.DataFrame({"Heure": [d[11:16] for d in w['hourly']['time'][:24]], "Nuages (%)": w['hourly']['cloudcover'][:24]}).set_index("Heure")
+        st.subheader("☁️ Prévisions Nuages (%)")
         st.area_chart(df_w, color="#FF3333")
     except: st.error("Météo indisponible")
 
+# --- TAB 3 : ÉNERGIE ---
 with t_batt:
     st.subheader("🔋 Consommation Batterie")
     wh = st.number_input("Wh de la batterie", value=240)
     c1, c2 = st.columns(2)
-    p_mount = c1.slider("Monture", 5, 25, 10)
-    p_tec = c1.slider("Refroidissement", 0, 40, 20)
-    p_pc = c2.slider("ASIAIR/PC", 5, 25, 10)
-    p_dew = c2.slider("Bandes chauffantes", 0, 40, 15)
-    runtime = (wh * 0.9) / (p_mount + p_tec + p_pc + p_dew)
-    st.metric("Autonomie estimée", f"{round(runtime, 1)} h")
+    p_m = c1.slider("Monture", 5, 25, 10); p_t = c1.slider("TEC Caméra", 0, 40, 20)
+    p_p = c2.slider("ASIAIR/PC", 5, 25, 10); p_d = c2.slider("Bandes chauffantes", 0, 40, 15)
+    autonomie = (wh * 0.9) / (p_m + p_t + p_p + p_d)
+    st.metric("Autonomie estimée", f"{round(autonomie, 1)} h")
