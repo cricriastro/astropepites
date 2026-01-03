@@ -2,10 +2,13 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+
+# Importations astropy corrigées:
 from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_body
-from astropy import get_moon, get_sun # Importation corrigée de get_moon et get_sun
+from astropy import get_moon, get_sun # <-- Correct: import direct depuis astropy
 from astropy.time import Time
 import astropy.units as u
+
 from datetime import datetime, timedelta
 from streamlit_js_eval import streamlit_js_eval
 
@@ -137,7 +140,7 @@ with tab2:
     
     c1.metric("Lune", f"{moon.alt.deg:.1f}°")
     c2.metric("Soleil", f"{sun.alt.deg:.1f}°")
-    c3.metric("Phase Lune", "85% (Test)") # On pourrait calculer la phase réelle ici
+    c3.metric("Phase Lune", "85% (Test)")
 
     st.subheader("📅 Événements 2026")
     st.info("📢 **12 Août 2026** : Éclipse Solaire Totale (visible partiellement en Europe)")
