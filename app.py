@@ -3,9 +3,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# --- Importations astropy corrigées et complètes ---
+# --- Importations astropy simplifiées et robustes ---
+# Nous utilisons seulement ce qui est nécessaire pour éviter les erreurs d'importation spécifiques
 from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_body
-from astropy import get_moon, get_sun # <-- Importation depuis le package racine
 from astropy.time import Time
 import astropy.units as u
 
@@ -37,11 +37,11 @@ loc = streamlit_js_eval(
     delay=100
 )
 
+# Valeurs par défaut sécurisées
 if loc:
     st.session_state.lat = loc["coords"]["latitude"]
     st.session_state.lon = loc["coords"]["longitude"]
 
-# Utilisation de valeurs par défaut sécurisées si la géolocalisation échoue
 lat = st.sidebar.number_input("Latitude", value=st.session_state.get("lat", 46.8))
 lon = st.sidebar.number_input("Longitude", value=st.session_state.get("lon", 7.1))
 
@@ -88,11 +88,11 @@ angles = np.linspace(0,2*np.pi,8,endpoint=False)
 fig,ax = plt.subplots(figsize=(3,3), subplot_kw={"projection":"polar"})
 ax.set_theta_zero_location("N")
 ax.set_theta_direction(-1)
-ax.fill(np.append(angles,angles[0]),
-        mask_values+[mask_values[0]],
+ax.fill(np.append(angles,angles),
+        mask_values+[mask_values],
         color="red",alpha=0.4)
-ax.fill_between(np.append(angles,angles[0]),
-                mask_values+[mask_values[0]],90,
+ax.fill_between(np.append(angles,angles),
+                mask_values+[mask_values],90,
                 color="green",alpha=0.2)
 ax.set_yticklabels([])
 ax.set_xticklabels(["N","NE","E","SE","S","SW","W","NW"])
@@ -163,13 +163,10 @@ with tab1:
 # =========================
 with tab2:
     st.subheader("☄️ Comètes (calcul temps réel)")
-    # Correction: utiliser get_body avec "moon" et "sun" fonctionne toujours si get_moon/get_sun échoue
+    # Utilisation de get_body pour Mars, Lune et Soleil (plus robuste)
     mars = get_body("mars", now) 
     altaz_mars = mars.transform_to(AltAz(obstime=now,location=location))
     st.write(f"Exemple Mars (test gratuit) – Alt {altaz_mars.alt:.1f}")
-
-    moon_pos = get_moon(now)
-    sun_pos = get_sun(now)
 
     st.subheader("🌒 Éclipses 2026")
     st.write("🔴 12 Août 2026 – Éclipse solaire (Europe)")
