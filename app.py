@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
-from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_moon
+from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_body
 from astropy.time import Time
 import astropy.units as u
 from datetime import datetime, timedelta
@@ -137,7 +137,7 @@ with tabs[0]:
     
     now = Time.now()
     loc = EarthLocation(lat=45*u.deg, lon=5*u.deg) # Default
-    moon_pos = get_moon(now)
+    moon_pos = get_body("moon", now)
     
     results = []
     for t in db:
