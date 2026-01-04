@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
-import requests
 import numpy as np
+import requests
 import matplotlib.pyplot as plt
 from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_body
 from astropy.time import Time
@@ -11,23 +11,31 @@ from streamlit_js_eval import streamlit_js_eval
 import math
 
 # --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="AstroPépites Pro v4.5", layout="wide")
+st.set_page_config(page_title="AstroPépites Pro v4.6.1", layout="wide")
 
-# --- STYLE VISION NOCTURNE (Le style qui fait planter les anciennes versions !) ---
+# --- STYLE VISION NOCTURNE (CORRIGÉ POUR ÉVITER LE TYPEERROR) ---
 st.markdown("""
     <style>
     .stApp { background-color: #000000; color: #FFFFFF !important; }
     h1, h2, h3 { color: #FF3333 !important; font-weight: bold !important; }
     .stMarkdown, label, p, span, div { color: #FFFFFF !important; font-size: 1rem !important; }
-    .stMetric { background-color: #1a0000; border: 2px solid #FF3333; border-radius: 12px; }
+    .stMetric { background-color: #1a0000; border: 2px solid #FF3333; border-radius: 12px; padding: 10px; }
     [data-testid="stMetricValue"] { color: #FF3333 !important; font-weight: bold !important; }
     .stTabs [data-baseweb="tab-list"] { background-color: #111; border-radius: 10px; }
     .stTabs [data-baseweb="tab"] { color: #FF3333 !important; font-weight: bold !important; }
     .mosaic-alert { background-color: #331a00; border: 1px dashed #FF8800; padding: 10px; border-radius: 10px; color: #FF8800 !important; font-weight: bold; }
     .boost-box { background-color: #001a33; border: 1px solid #0088FF; padding: 10px; border-radius: 10px; color: #0088FF !important; }
     hr { border: 1px solid #333; }
+    .stSelectbox div[data-baseweb="select"] { background-color: #222 !important; color: white !important; }
     </style>
-    """, unsafe_allow_html=True) # <-- CECI EST LA CORRECTION POUR LE STYLE!
+    """, unsafe_allow_html=True) # <-- CORRECTION ICI : 'unsafe_allow_html'
+
+# --- FONCTIONS TECHNIQUES ---
+def get_live_weather(lat, lon):
+    try:
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&hourly=cloudcover&timezone=auto"
+        return requests.get(url, timeout=5).json()
+    except: return None
 
 # --- SIDEBAR & GPS ---
 st.sidebar.title("🔭 AstroPépites Pro")
@@ -58,7 +66,7 @@ def get_horizon_limit(az):
     idx = int(((az + 22.5) % 360) // 45)
     return mask_values[idx]
 
-# --- MATÉRIEL ---
+# --- MATÉRIEL & CALCULS ---
 st.sidebar.header("📸 Matériel")
 TELS = {"Evolux 62ED":(400,62), "Esprit 100":(550,100), "RedCat 51":(250,51), "Newton 200/800":(800,200), "C8":(1280,203)}
 CAMS = {"ASI 183MC":(13.2, 8.8, 2.4, 84), "ASI 2600MC":(23.5, 15.7, 3.76, 80)}
@@ -66,8 +74,7 @@ tube = st.sidebar.selectbox("Télescope", list(TELS.keys()))
 cam = st.sidebar.selectbox("Caméra", list(CAMS.keys()))
 focale, diam = TELS[tube]; sw, sh, px, qe = CAMS[cam]
 f_ratio = focale / diam
-fov_w = (sw * 3438) / focale
-fov_h = (sh * 3438) / focale
+fov_w = (sw * 3438) / focale; fov_h = (sh * 3438) / focale
 
 # --- BASE DE DONNÉES CIBLES ---
 db = []
@@ -89,7 +96,7 @@ try: moon_pos = get_body("moon", now)
 except: moon_pos = None
 
 with t_radar:
-    st.write("### 🎯 Analyse et Planning")
+    st.write("### 🎯 Analyse de Session")
     target_names = [t['name'] for t in db]
     active_target = st.selectbox("Cible active (pour voir le planning) :", ["--- Sélectionner ---"] + target_names)
 
@@ -130,7 +137,7 @@ with t_radar:
             st.write(f"📐 Ton Champ : {round(fov_w)}' x {round(fov_h)}'")
         st.markdown("---")
 
-# Météo et Batterie restent identiques...
+# --- TAB 2 : MÉTÉO ---
 with t_meteo:
     try:
         w_url = f"https://api.open-meteo.com/v1/forecast?latitude={u_lat}&longitude={u_lon}&current_weather=true&hourly=cloudcover&timezone=auto"
@@ -140,6 +147,7 @@ with t_meteo:
         st.area_chart(df_w, color="#FF3333")
     except: st.error("Météo indisponible")
 
+# --- TAB 3 : ÉNERGIE ---
 with t_batterie:
     st.subheader("🔋 Énergie")
     wh = st.number_input("Wh batterie", value=240)
