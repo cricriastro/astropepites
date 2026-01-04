@@ -1,6 +1,6 @@
+astropy
 streamlit
 pandas
 numpy
 matplotlib
-astropy
 requests
