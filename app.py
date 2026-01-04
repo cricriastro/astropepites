@@ -4,102 +4,103 @@ import matplotlib.pyplot as plt
 import requests
 from datetime import datetime, timedelta
 
-# --- CONFIGURATION ---
-st.set_page_config(page_title="AstroPépites Expert Romont", layout="wide")
+# --- CONFIGURATION VITRINE ---
+st.set_page_config(page_title="AstroPépites Pro 2026", layout="wide")
 
-# --- BASE DE DONNÉES CIBLES (Correction Expert) ---
-TARGETS_INTEL = {
-    "M31 Andromède": {"type": "Galaxie", "desc": "Continu + Régions HII (Ha)."},
-    "M42 Orion": {"type": "Nébuleuse", "desc": "Émission intense (Ha, OIII)."},
-    "C/2023 A3 (Comète)": {"type": "Comète", "desc": "Gaz (Cyan) + Poussières."},
-    "NGC 7000 (North America)": {"type": "Nébuleuse", "desc": "Émission Hydrogène (Ha)."},
-    "M45 Les Pléiades": {"type": "Amas", "desc": "Réflexion bleue (Spectre continu)."}
-}
+# --- STYLE CSS PERSONNALISÉ ---
+st.markdown("""
+    <style>
+    .stMetric { background-color: #1e2130; padding: 15px; border-radius: 10px; border: 1px solid #3e445b; }
+    .stAlert { border-radius: 10px; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# --- SIDEBAR : RÉGLAGES PRÉCIS ---
-st.sidebar.title("🛠️ Mon Setup ASIAIR")
+# --- FONCTIONS CLÉS ---
+def get_weather_forecast():
+    # Utilisation de ta clé API pour Romont
+    api_key = "16f68f1e07fea20e39f52de079037925"
+    url = f"https://api.openweathermap.org/data/2.5/forecast?lat=46.65&lon=6.91&appid={api_key}&units=metric&lang=fr"
+    try:
+        data = requests.get(url).json()
+        return data['list'][:8] # On prend les prochaines 24h (pas de 3h)
+    except:
+        return None
 
-with st.sidebar.expander("🎥 Caméra Personnalisée", expanded=True):
-    cam_name = st.text_input("Modèle", "ZWO ASI294MC Pro")
+# --- SIDEBAR : LE MATÉRIEL ---
+st.sidebar.title("🔭 Ma Configuration")
+
+with st.sidebar.expander("🎥 Capteur & Optique", expanded=True):
+    cam_name = st.text_input("Caméra", "ZWO ASI294MC Pro")
     w_cam = st.number_input("Conso Caméra (W)", 1, 30, 15)
-    px_size = st.number_input("Taille pixels (µm)", 1.0, 10.0, 4.63)
+    px_size = st.number_input("Taille Pixel (µm)", 1.0, 10.0, 4.63)
+    focale = st.number_input("Focale tube (mm)", 50, 3000, 400)
 
 with st.sidebar.expander("🔋 Énergie (Bluetti EB3A)", expanded=True):
-    bat_wh = 268  # Capacité fixe de ta EB3A
-    w_mount = st.number_input("Monture (W)", 1, 25, 8)
-    w_asiair_guide = st.number_input("ASIAIR + Guidage (W)", 1, 20, 8)
+    bat_wh = 268 
+    w_mnt = st.number_input("Monture (W)", 1, 25, 8)
+    w_asiair = st.number_input("ASIAIR/Guidage (W)", 1, 25, 8)
     w_heat = st.number_input("Chauffage (W)", 0, 40, 12)
     
-    total_w = w_cam + w_mount + w_asiair_guide + w_heat
-    # Calcul d'autonomie (85% utilisable pour protéger la batterie)
+    total_w = w_cam + w_mnt + w_asiair + w_heat
     autonomie_h = (bat_wh * 0.85) / total_w
     heure_fin = datetime.now() + timedelta(hours=autonomie_h)
 
-with st.sidebar.expander("🧭 Horizon (Degrés exacts)", expanded=False):
-    h = {d: st.number_input(f"{d} (°)", 0, 90, 15) for d in ["N", "NE", "E", "SE", "S", "SO", "O", "NO"]}
+# --- DASHBOARD PRINCIPAL ---
+st.title("🌌 AstroPépites Dashboard Pro")
 
-# --- INTERFACE PRINCIPALE ---
-st.title("🔭 AstroPépites Pro Dashboard")
+# --- SECTION MÉTÉO & FENÊTRE DE TIR ---
+st.subheader("☁️ Prévisions & Fenêtre de Tir (Romont)")
+forecast = get_weather_forecast()
 
-# MÉTÉO RÉELLE AVEC TA CLÉ (Romont)
-try:
-    # Utilisation de ta clé API OpenWeather
-    api_key = "16f68f1e07fea20e39f52de079037925"
-    url = f"https://api.openweathermap.org/data/2.5/weather?lat=46.65&lon=6.91&appid={api_key}&units=metric"
-    m = requests.get(url).json()
+if forecast:
+    cols = st.columns(len(forecast))
+    for i, slot in enumerate(forecast):
+        heure = datetime.fromtimestamp(slot['dt']).strftime('%H:%M')
+        nuages = slot['clouds']['all']
+        # Couleur selon couverture
+        color = "🟢" if nuages < 20 else "🟡" if nuages < 60 else "🔴"
+        cols[i].metric(f"{color} {heure}", f"{nuages}%", f"{slot['main']['temp']}°C", delta_color="inverse")
     
-    met1, met2, met3 = st.columns(3)
-    met1.metric("Nuages", f"{m['clouds']['all']}%")
-    met2.metric("Humidité", f"{m['main']['humidity']}%")
-    met3.metric("Coupure Énergie", heure_fin.strftime("%H:%M"))
-    
-    if m['clouds']['all'] > 60:
-        st.error("⚠️ Couverture nuageuse importante à Romont.")
-except Exception:
-    st.warning("⚠️ Erreur de connexion météo (Vérifie ta connexion internet).")
+    # Analyse de la meilleure heure
+    clear_slots = [datetime.fromtimestamp(s['dt']).strftime('%H:%M') for s in forecast if s['clouds']['all'] < 30]
+    if clear_slots:
+        st.success(f"✨ **Ciel dégagé prévu à : {', '.join(clear_slots)}**. C'est le moment de chauffer le capteur !")
+    else:
+        st.warning("☁️ Pas de trouée majeure prévue dans les prochaines heures.")
 
 st.divider()
 
-# SÉLECTION CIBLE ET FILTRE
+# --- CIBLE & ANALYSE SCIENTIFIQUE ---
 c1, c2 = st.columns(2)
-t_name = c1.selectbox("🎯 Cible du soir", list(TARGETS_INTEL.keys()))
-f_name = c2.selectbox("💎 Filtre installé", ["Svbony SV220 (Dual-Band)", "Optolong L-Pro", "UV/IR Cut"])
+target = c1.text_input("🎯 Cible (Messier, NGC, Comète, Éclipse...)", "M31 Andromède")
+filtre = c2.selectbox("💎 Filtre", ["Sans Filtre / Clair", "Svbony SV220 (Dual-Band)", "Optolong L-Pro", "UV/IR Cut"])
 
-# --- ANALYSE FILTRAGE ---
-st.subheader("📋 Analyse Technique")
+st.subheader("📋 Analyse du Shooting")
+info_col, graph_col = st.columns([1, 1])
 
-t_type = TARGETS_INTEL[t_name]["type"]
-if f_name == "Svbony SV220 (Dual-Band)":
-    if "Galaxie" in t_type:
-        st.warning(f"💡 **Note Expert :** Sur {t_name}, le SV220 capture spécifiquement les nébuleuses rouges (H-alpha). C'est parfait pour les détails, mais pense à mixer avec du signal sans filtre pour les bras de la galaxie.")
-    elif "Comète" in t_type or "Amas" in t_type:
-        st.error(f"❌ **Erreur Signal :** Le SV220 bloque le spectre bleu/vert de {t_name}. Utilise un filtre clair !")
+with info_col:
+    # Échantillonnage
+    echantillon = (px_size / focale) * 206.265
+    st.info(f"📐 Échantillonnage : **{echantillon:.2f}\"/pixel**")
+    
+    # Logique Filtre Expert
+    t = target.lower()
+    if "sv220" in filtre.lower():
+        if "m31" in t or "andromède" in t or "m51" in t:
+            st.warning("💡 **Expert :** Le SV220 isolera les régions HII (nuages rouges) de la galaxie. Prévoyez des poses sans filtre pour la structure stellaire.")
+        elif "comète" in t or "c/202" in t:
+            st.error("❌ **Incompatible :** Le Dual-Band bloque le spectre continu des comètes. Passez en 'Sans Filtre'.")
+    elif "sans filtre" in filtre.lower() and "éclipse" in t:
+        st.error("🚫 **DANGER :** Filtre solaire obligatoire pour une éclipse solaire !")
     else:
-        st.success(f"✅ **Optimal :** Le contraste sera parfait sur les gaz de {t_name}.")
-else:
-    st.success(f"✅ Filtre {f_name} validé pour {t_name}.")
+        st.success(f"✅ Setup {filtre} cohérent pour {target}.")
 
-# --- GRAPHIQUES ---
-st.write(f"🔋 **Autonomie :** {int(autonomie_h)}h {int((autonomie_h%1)*60)}min restants.")
-col_g, col_r = st.columns([1.5, 1])
-
-with col_g:
-    # Graphique de décharge
-    tx = np.linspace(0, autonomie_h, 100)
-    ty = np.linspace(100, 15, 100)
-    fig, ax = plt.subplots(figsize=(8, 2.5))
-    ax.plot(tx, ty, color='#00FF00', lw=2)
-    ax.fill_between(tx, ty, color='#00FF00', alpha=0.1)
+with graph_col:
+    st.write(f"🔋 **Batterie :** Fin à **{heure_fin.strftime('%H:%M')}**")
+    tx = np.linspace(0, autonomie_h, 100); ty = np.linspace(100, 15, 100)
+    fig, ax = plt.subplots(figsize=(7, 3))
+    ax.plot(tx, ty, color='#00ffd0', lw=2)
+    ax.fill_between(tx, ty, color='#00ffd0', alpha=0.1)
     ax.set_facecolor("#0e1117"); fig.patch.set_facecolor("#0e1117")
-    ax.set_ylabel("%", color="white"); ax.tick_params(colors='white')
+    ax.tick_params(colors='white'); ax.grid(color='#2e334d', linestyle='--')
     st.pyplot(fig)
-
-with col_r:
-    # Rose des vents
-    angles = np.radians([0, 45, 90, 135, 180, 225, 270, 315])
-    fig_h, ax_h = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(3,3))
-    ax_h.bar(angles, list(h.values()), color='red', alpha=0.5)
-    ax_h.set_theta_zero_location('N'); ax_h.set_theta_direction(-1)
-    ax_h.set_facecolor("#0e1117"); fig_h.patch.set_facecolor("#0e1117")
-    ax_h.tick_params(colors='white')
-    st.pyplot(fig_h)
