@@ -4,96 +4,96 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="AstroPépites : Expert Horizon", layout="wide")
+st.set_page_config(page_title="AstroPépites : Expert Romont", layout="wide")
 
-# --- BASE DE DONNÉES ÉTENDUE ---
+# --- 1. BASE DE DONNÉES DES CATALOGUES (Versions étendues) ---
 CATALOGUES = {
-    "Messier": ["M1", "M13", "M16", "M27", "M31", "M33", "M42", "M45", "M51", "M81", "M101"],
-    "NGC / IC": ["NGC 7000", "NGC 6960", "NGC 2237", "IC 434", "IC 1396", "NGC 891", "NGC 4565", "IC 1805"],
-    "Sharpless (Sh2)": ["Sh2-155 (Cave)", "Sh2-101 (Tulip)", "Sh2-129 (Squid)", "Sh2-190 (Heart)", "Sh2-276 (Barnard Loop)"],
-    "Abell (Planétaires)": ["Abell 21 (Medusa)", "Abell 33", "Abell 39", "Abell 70", "Abell 1656"],
-    "Arp (Galaxies)": ["Arp 244 (Antennae)", "Arp 188 (Tadpole)", "Arp 273 (Rose)", "Arp 297"],
-    "Barnard / LDN": ["Barnard 33", "Barnard 150", "LDN 1251", "LDN 673", "LBN 438"],
+    "Messier (Classiques)": [f"M{i}" for i in range(1, 111)],
+    "NGC / IC (Sélection)": ["NGC 7000", "NGC 6960", "NGC 2237", "IC 434", "IC 1396", "NGC 891", "NGC 4565", "IC 1805", "NGC 253", "NGC 6946"],
+    "Abell (Planétaires)": [f"Abell {i}" for i in [21, 31, 33, 39, 70, 72, 85]],
+    "Arp (Galaxies Exotiques)": [f"Arp {i}" for i in [244, 188, 273, 297, 299, 317]],
+    "Sharpless (Sh2 - Nébuleuses)": [f"Sh2-{i}" for i in [1, 101, 129, 155, 190, 240, 276]],
+    "Barnard / LDN (Sombres)": [f"Barnard {i}" for i in [33, 150, 142]] + [f"LDN {i}" for i in [1251, 673, 438]],
+    "Hickson (HCG - Groupes)": [f"HCG {i}" for i in [44, 68, 92]],
     "Événements 2026": ["Éclipse Solaire Totale (12/08)", "C/2023 A3 (Comète)", "Éclipse Lunaire (03/03)"]
 }
 
-# Logique de recommandation de filtres
-def get_recommended_filters(cat, target):
-    if "Sharpless" in cat or "NGC 7000" in target or "IC 434" in target or "Abell" in cat:
-        return ["Svbony SV220 (Dual-Band)", "Optolong L-eXtreme", "Filtre H-alpha"]
-    elif "Barnard" in cat or "LDN" in cat or "M31" in target or "M45" in target or "Arp" in cat:
-        return ["Sans Filtre / Clair", "Optolong L-Pro", "UV/IR Cut"]
-    elif "Solaire" in target:
-        return ["Filtre Solaire Frontal (ND 5.0)"]
-    else:
-        return ["Sans Filtre / Clair", "Svbony SV220 (Dual-Band)", "Optolong L-Pro"]
-
-# --- SIDEBAR (Boussole 8 points) ---
+# --- 2. GESTION DU MATÉRIEL (Ton inventaire) ---
 with st.sidebar:
-    st.title("🧭 Horizon & Setup")
-    obs = {}
-    dirs = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"]
-    for d in dirs:
-        obs[d] = st.slider(f"Obstacle {d} (°)", 0, 90, 15)
+    st.title("🎒 Mon Sac à Matériel")
+    st.subheader("Mes Filtres")
+    possede_clair = st.checkbox("Filtre Clair / UV-IR Cut", value=True)
+    possede_dual = st.checkbox("Svbony SV220 (Dual-Band)", value=True)
+    possede_lpro = st.checkbox("Optolong L-Pro / Anti-Pollution", value=False)
+    possede_solaire = st.checkbox("Filtre Solaire Frontal", value=False)
+    
+    mes_filtres = []
+    if possede_clair: mes_filtres.append("UV-IR Cut / Clair")
+    if possede_dual: mes_filtres.append("SV220 (Dual-Band)")
+    if possede_lpro: mes_filtres.append("L-Pro / Anti-Pollution")
+    if possede_solaire: mes_filtres.append("Filtre Solaire")
 
-    fig_b, ax_b = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(3, 3))
-    angles = np.linspace(0, 2*np.pi, 9)
-    values = [obs[d] for d in dirs] + [obs["N"]]
-    ax_b.fill(angles, values, color='#ff4b4b', alpha=0.4, edgecolor='#ff4b4b', lw=2)
-    ax_b.set_theta_zero_location('N')
-    ax_b.set_theta_direction(-1)
-    ax_b.set_facecolor('#1e2130')
-    fig_b.patch.set_facecolor('#0e1117')
-    ax_b.tick_params(colors='white')
-    st.pyplot(fig_b)
+    st.divider()
+    st.title("🧭 Horizon (Romont)")
+    obs = {d: st.slider(f"{d} (°)", 0, 90, 15) for d in ["N", "NE", "E", "SE", "S", "SO", "O", "NO"]}
 
-# --- INTERFACE PRINCIPALE ---
-st.title("🔭 Planification Expert : Cibles & Optique")
+# --- 3. LOGIQUE DE RECOMMANDATION INTELLIGENTE ---
+def conseiller_filtre(cat, target, inventaire):
+    # Logique pour Nébuleuses (Ha/OIII)
+    if any(c in cat for c in ["Sharpless", "Abell"]) or "NGC 7000" in target or "IC 434" in target:
+        if "SV220 (Dual-Band)" in inventaire:
+            return "✅ Utilise ton **SV220** (Idéal pour faire ressortir le gaz)."
+        return "⚠️ Tu devrais utiliser un filtre Dual-Band (non possédé)."
+    
+    # Logique pour Galaxies / Poussières
+    if any(c in cat for c in ["Arp", "Barnard", "Messier"]):
+        if "L-Pro / Anti-Pollution" in inventaire:
+            return "✅ Utilise ton **L-Pro** (Bon compromis contre la pollution de Romont)."
+        return "✅ Utilise ton **Filtre Clair** (Garde le spectre complet pour cette cible)."
+    
+    return "Filtre standard conseillé."
 
-# 1. SÉLECTION DYNAMIQUE
-st.divider()
-c1, c2, c3 = st.columns([1, 1, 1])
+# --- 4. INTERFACE PRINCIPALE ---
+st.title("🔭 Planification de Shooting Expert")
+
+c1, c2 = st.columns([2, 1])
 
 with c1:
-    choix_cat = st.selectbox("📁 Catalogue", list(CATALOGUES.keys()))
-with c2:
-    choix_cible = st.selectbox(f"🎯 Cible {choix_cat}", CATALOGUES[choix_cat])
-with c3:
-    recommandations = get_recommended_filters(choix_cat, choix_cible)
-    filtre = st.selectbox("💎 Filtre conseillé", recommandations)
-
-# 2. VIGNETTE & ANALYSE
-st.divider()
-col_img, col_txt = st.columns([1, 2])
-
-with col_img:
-    # Génération d'une vignette automatique via Wikipedia/Placeholder
-    # (Remplace les espaces par des + pour l'URL)
-    img_query = choix_cible.split('(')[0].strip().replace(' ', '+')
-    st.image(f"https://api.star-navigation.com/target_thumbnail/{img_query}", 
-             fallback=f"https://via.placeholder.com/400x300.png?text=Vignette:+{img_query}",
-             caption=f"Vignette de confirmation : {choix_cible}")
-
-with col_txt:
-    st.subheader(f"📋 Rapport d'Analyse : {choix_cible}")
+    st.subheader("🎯 Choix de la cible")
+    col_cat, col_target = st.columns(2)
+    cat_choisi = col_cat.selectbox("Catalogue", list(CATALOGUES.keys()))
+    cible_choisie = col_target.selectbox(f"Objet dans {cat_choisi}", CATALOGUES[cat_choisi])
     
-    # Message intelligent basé sur le filtre choisi
-    if "SV220" in filtre:
-        st.info("💡 **Analyse Optique** : Ce filtre Dual-Band fera ressortir les nébulosités rouges (Ha) et bleu-vert (OIII).")
-    elif "Sans Filtre" in filtre:
-        st.success("💡 **Analyse Optique** : Idéal pour les galaxies ou poussières sombres afin de garder les couleurs naturelles.")
+    # Recommandation basée sur TON matériel
+    recommandation = conseiller_filtre(cat_choisi, cible_choisie, mes_filtres)
+    st.info(recommandation)
 
-    # Graphique d'autonomie
-    tx = np.linspace(0, 8, 100); ty = np.linspace(100, 10, 100)
-    fig, ax = plt.subplots(figsize=(8, 2.5))
-    ax.plot(tx, ty, color='#00ffd0', lw=2)
-    ax.fill_between(tx, ty, color='#00ffd0', alpha=0.1)
-    ax.set_facecolor("#0e1117"); fig.patch.set_facecolor("#0e1117")
-    ax.tick_params(colors='white')
-    st.pyplot(fig)
+with c2:
+    # VIGNETTE DYNAMIQUE
+    st.write("**Vignette de confirmation**")
+    clean_name = cible_choisie.split('(')[0].strip().replace(' ', '+')
+    # Utilisation d'un service d'imagerie astro simplifié
+    st.image(f"https://imgproxy.astronomy-imaging-camera.com/api/v1/objects/{clean_name}/thumbnail", 
+             caption=f"Aperçu {cible_choisie}",
+             fallback="https://via.placeholder.com/200x150.png?text=Cible+Rare")
 
-# 3. RECHERCHE LIBRE
-with st.expander("🔍 Objet hors-catalogue (NASA/Hubble)"):
-    search_q = st.text_input("Taper un nom ou matricule (ex: PGC 1234)...")
-    if search_q:
-        st.write(f"🛰️ Recherche de métadonnées pour : {search_q}")
+# --- 5. RAPPORT ET ÉNERGIE ---
+st.divider()
+col_rep, col_graph = st.columns([2, 1])
+
+with col_rep:
+    st.subheader("📋 Résumé de la session")
+    st.write(f"**Cible :** {cible_choisie}")
+    st.write(f"**Site :** Romont, FR (Altitude max : {90-obs['S']}°)")
+    if "Solaire" in cible_choisie and not possede_solaire:
+        st.error("🚨 ATTENTION : Tu n'as pas coché le filtre solaire dans ton matériel !")
+
+with col_graph:
+    # Graphique boussole miniature
+    fig_b, ax_b = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(2, 2))
+    angles = np.linspace(0, 2*np.pi, 9)
+    vals = list(obs.values()) + [obs["N"]]
+    ax_b.fill(angles, vals, color='red', alpha=0.3)
+    ax_b.set_facecolor('#1e2130'); fig_b.patch.set_facecolor('#0e1117')
+    ax_b.set_yticklabels([]); ax_b.set_xticklabels([])
+    st.pyplot(fig_b)
