@@ -1,99 +1,127 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import requests
 import matplotlib.pyplot as plt
-from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_moon
+from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_sun
 from astropy import units as u
 from astropy.time import Time
+from datetime import datetime, timedelta
 
-# --- CONFIGURATION ---
-st.set_page_config(page_title="AstroPépites : Expert Filtres Mondial", layout="wide")
+# --- CONFIGURATION PAGE ---
+st.set_page_config(page_title="AstroPépites Live", layout="wide")
 
-# --- 1. BIBLIOTHÈQUE MONDIALE DE FILTRES ---
-FILTERS_MARKET = {
-    "Svbony": ["SV220 Dual-Band", "SV226 CLS", "UV/IR Cut"],
-    "Optolong": ["L-Pro", "L-Extreme", "L-Ultimate", "L-Enhance", "Clear Sky"],
-    "Antlia": ["ALP-T Dual Band (5nm)", "Triband RGB Ultra", "Ha/OIII/SII Pro"],
-    "ZWO": ["Duo-Band Filter", "LRGB Kit", "Narrowband 7nm"],
-    "Baader": ["Neodymium (Moon & Skyglow)", "UHC-S", "Fringe Killer"],
-    "IDAS": ["LPS-D2", "NBZ Nebula Boost", "LPS-D3"]
+# --- 1. MODULE GPS & TEMPS RÉEL ---
+# Note : Sur navigateur, on utilise une détection IP ou une saisie manuelle simplifiée
+st.sidebar.title("📍 LOCALISATION & GPS")
+if st.sidebar.button("📍 Actualiser ma position GPS"):
+    # Simulation de récupération de coordonnées (utilisez streamlit_js_eval pour du vrai GPS)
+    try:
+        geo = requests.get('https://ipapi.co/json/').json()
+        st.session_state.lat = geo['latitude']
+        st.session_state.lon = geo['longitude']
+        st.sidebar.success(f"Position : {geo['city']} ({st.session_state.lat}, {st.session_state.lon})")
+    except:
+        st.sidebar.error("GPS indisponible, passage en manuel.")
+
+lat = st.sidebar.number_input("Latitude", value=st.session_state.get('lat', 48.85))
+lon = st.sidebar.number_input("Longitude", value=st.session_state.get('lon', 2.35))
+location = EarthLocation(lat=lat*u.deg, lon=lon*u.deg)
+
+# --- 2. MÉTÉO LIVE & ALERTES ---
+st.sidebar.divider()
+st.sidebar.title("☁️ MÉTÉO ASTRO LIVE")
+
+def get_live_weather(lat, lon):
+    url = f"https://www.7timer.info/bin/astro.php?lon={lon}&lat={lat}&ac=0&unit=metric&output=json"
+    try:
+        data = requests.get(url).json()['dataseries']
+        return data
+    except: return None
+
+weather_data = get_live_weather(lat, lon)
+
+if weather_data:
+    current = weather_data[0]
+    next_3h = weather_data[1]
+    
+    if current['cloudcover'] > 5:
+        if next_3h['cloudcover'] <= 3:
+            st.sidebar.warning("🔔 ALERTE : Ciel couvert, mais ça se dégage dans 3h ! Préparez le setup.")
+        else:
+            st.sidebar.error("❌ Couvert : Pas de shoot possible pour le moment.")
+    else:
+        st.sidebar.success("✅ CIEL CLAIR : Sortez le matériel maintenant !")
+
+# --- 3. CALCULATEUR DE LA "MEILLEURE HEURE" (GOLDEN HOUR) ---
+def find_best_time(target_coord, location):
+    now = Time.now()
+    times = now + np.linspace(0, 15, 150)*u.hour # Analyse sur 15 heures
+    altaz_frame = AltAz(obstime=times, location=location)
+    target_altaz = target_coord.transform_to(altaz_frame)
+    sun_altaz = get_sun(times).transform_to(altaz_frame)
+    
+    # Critères : Soleil < -12° (crépuscule nautique) et Altitude cible max
+    dark_mask = sun_altaz.alt.deg < -12
+    if not any(dark_mask): return None, None
+    
+    best_idx = np.argmax(target_altaz.alt.deg[dark_mask])
+    best_time = times[dark_mask][best_idx]
+    best_alt = target_altaz.alt.deg[dark_mask][best_idx]
+    
+    return best_time, best_alt
+
+# --- 4. INTERFACE PRINCIPALE ---
+st.title("🔭 AstroPépites : Planificateur Stratégique")
+
+# Base de cibles (extraits)
+targets = {
+    "Arp 273 (La Rose)": "02h21m28s +39d22m32s",
+    "M31 (Andromède)": "00h42m44s +41d16m09s",
+    "Abell 31": "08h54m13s +08d53m52s"
 }
 
-# Mise à plat de la liste pour la recherche
-all_filters_list = []
-for brand, models in FILTERS_MARKET.items():
-    for model in models:
-        all_filters_list.append(f"{brand} - {model}")
-all_filters_list.append("Aucun / Tiroir Vide")
+sel_name = st.selectbox("🎯 Choisissez votre cible pour ce soir :", list(targets.keys()))
+coord = SkyCoord(targets[sel_name], frame='icrs')
 
-# --- 2. LOGIQUE DE CONSEIL FILTRE ---
-def get_filter_advice(target_type, selected_filter):
-    advice = ""
-    is_narrow = any(x in selected_filter for x in ["Dual", "Extreme", "Ultimate", "Narrow", "SV220", "NBZ", "ALP-T"])
-    
-    if "Galaxie" in target_type or "Amas" in target_type:
-        if is_narrow:
-            advice = "⚠️ **Attention :** Ce filtre est trop sélectif pour une galaxie. Vous allez perdre les couleurs des bras spiraux. Utilisez plutôt un filtre L-Pro ou laissez le tiroir vide."
-        else:
-            advice = "✅ **Bon choix :** Ce filtre large bande (ou vide) respectera les couleurs naturelles de la galaxie."
-    
-    elif "Nébuleuse" in target_type:
-        if is_narrow:
-            advice = "✅ **Parfait :** Ce filtre Narrowband fera ressortir le H-alpha et l'OIII, même avec la Lune ou de la pollution."
-        else:
-            advice = "💡 **Conseil :** Pour cette nébuleuse, un filtre Dual-Band (type SV220 ou L-Extreme) donnerait beaucoup plus de contraste."
-            
-    return advice
+best_t, best_a = find_best_time(coord, location)
 
-# --- 3. SIDEBAR : MATÉRIEL & CATALOGUES ---
-st.sidebar.title("🛠 CONFIGURATION SETUP")
+# Affichage du verdict
+st.header(f"📊 Verdict pour {sel_name}")
+col1, col2 = st.columns(2)
 
-with st.sidebar.expander("🔭 Mon Matériel & Filtres", expanded=True):
-    sel_scope = st.text_input("Télescope", "Evolux 62ED")
-    # LISTE DÉROULANTE MONDIALE
-    user_filter = st.selectbox("Filtre installé dans le tiroir", all_filters_list)
-    batt_wh = st.number_input("Batterie (Wh)", value=268)
+with col1:
+    if best_t:
+        local_time = (best_t.datetime + timedelta(hours=1)).strftime("%H:%M")
+        st.metric("Meilleure heure de shoot", local_time)
+        st.write(f"Altitude max dans le noir : **{best_a:.1f}°**")
+    else:
+        st.error("Cible non visible dans le noir complet cette nuit.")
 
-with st.sidebar.expander("🌲 Boussole & Catalogues", expanded=True):
-    h_n = st.slider("Nord", 0, 70, 20)
-    h_e = st.slider("Est", 0, 70, 15)
-    h_s = st.slider("Sud", 0, 70, 10)
-    h_o = st.slider("Ouest", 0, 70, 25)
-    show_arp = st.checkbox("Arp (Raretés)", value=True)
-    show_m = st.checkbox("Messier", value=True)
+with col2:
+    st.subheader("📋 État du Ciel")
+    if weather_data:
+        st.write(f"Nuages actuels : {current['cloudcover']}/9")
+        st.write(f"Transparence : {current['seeing']}/8")
 
-# --- 4. BASE DE DONNÉES CIBLES ---
-DB_OBJECTS = [
-    {"name": "Arp 273 (La Rose)", "type": "Galaxie", "ra": "02h21m28s", "dec": "+39d22m32s", "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/Interacting_galaxy_pair_Arp_273_%28captured_by_the_Hubble_Space_Telescope%29.jpg/320px-Interacting_galaxy_pair_Arp_273_%28captured_by_the_Hubble_Space_Telescope%29.jpg"},
-    {"name": "Abell 31", "type": "Nébuleuse P.", "ra": "08h54m13s", "dec": "+08d53m52s", "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/00/Abell_31_nebula.jpg/320px-Abell_31_nebula.jpg"}
-]
-
-# --- 5. INTERFACE ---
-st.title("🌌 AstroPépites : Planificateur Universel")
-
-sel_obj = st.selectbox("🎯 Choisir une cible", [o["name"] for o in DB_OBJECTS])
-t_data = next(obj for obj in DB_OBJECTS if obj["name"] == sel_obj)
-
-# Affichage de la vignette et du conseil filtre
-col_img, col_txt = st.columns([1, 2])
-
-with col_img:
-    st.image(t_data["img"], caption=f"Cible : {t_data['name']}")
-
-with col_txt:
-    st.subheader(f"🛡️ Stratégie pour {t_data['name']}")
-    st.write(f"**Cible de type :** {t_data['type']}")
-    st.write(f"**Filtre actuel :** {user_filter}")
-    
-    # Affichage du conseil intelligent basé sur le filtre choisi
-    conseil = get_filter_advice(t_data['type'], user_filter)
-    st.info(conseil)
-
-# Graphique de visibilité (Logique boussole conservée)
+# --- GRAPHIQUE DYNAMIQUE ---
 st.divider()
-st.subheader("📈 Visibilité & Horizon Local")
-# ... (Code du graphique identique à la v7.0) ...
+st.subheader("📈 Courbe de hauteur & Fenêtre de tir")
 
-# Rappel pour l'utilisateur
-if st.button("💾 Sauvegarder ma configuration"):
-    st.success(f"Configuration sauvegardée : {sel_scope} avec {user_filter}.")
+times_plot = Time.now() + np.linspace(0, 12, 100)*u.hour
+altaz_plot = coord.transform_to(AltAz(obstime=times_plot, location=location))
+sun_plot = get_sun(times_plot).transform_to(AltAz(obstime=times_plot, location=location))
+
+fig, ax = plt.subplots(figsize=(10, 4))
+ax.plot(np.linspace(0, 12, 100), altaz_plot.alt.deg, color='#00ffcc', label=sel_name, lw=2)
+# Zone d'obscurité
+dark_zone = sun_plot.alt.deg < -12
+ax.fill_between(np.linspace(0, 12, 100), 0, 90, where=dark_zone, color='gray', alpha=0.2, label="Nuit Noire")
+
+ax.set_facecolor("#0e1117")
+fig.patch.set_facecolor("#0e1117")
+ax.set_ylim(0, 90)
+ax.legend()
+st.pyplot(fig)
+
+st.info("💡 L'heure idéale est le moment où la courbe verte est au plus haut dans la zone grise.")
