@@ -3,98 +3,104 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="AstroPépites : Setup Complet", layout="wide")
+st.set_page_config(page_title="AstroPépites : Expert 2026", layout="wide")
 
-# --- 1. CATALOGUES ---
-CATALOGUES = {
-    "Messier": [f"M{i}" for i in range(1, 111)],
-    "NGC": ["NGC 7000", "NGC 6960", "NGC 2237", "NGC 891", "NGC 4565"],
-    "Sharpless (Sh2)": [f"Sh2-{i}" for i in [1, 101, 129, 155, 190, 240]],
-    "Arp (Galaxies)": [f"Arp {i}" for i in [244, 188, 273, 297]],
+# --- DATA : CAMÉRAS & CONSOMMATION (Watts) ---
+CAM_DB = {
+    "ZWO ASI2600MC/MM Pro": 20.0, "ZWO ASI533MC/MM Pro": 15.0,
+    "ZWO ASI294MC/MM Pro": 18.0, "ZWO ASI1600MM Pro": 15.0,
+    "ZWO ASI071MC Pro": 22.0, "ZWO ASI6200MC/MM Pro": 25.0,
+    "Sony A7III / Canon R6 (DSLR)": 5.0, "ASI 120MM/290MM (Non refroidie)": 2.0
 }
 
-# --- 2. BARRE LATÉRALE : GESTION TOTALE DU MATÉRIEL ---
+CATALOGUES = {
+    "Messier": [f"M{i}" for i in range(1, 111)],
+    "NGC": ["NGC 7000", "NGC 6960", "NGC 2237", "NGC 891", "NGC 4565", "NGC 6946"],
+    "Sharpless (Sh2)": [f"Sh2-{i}" for i in [1, 101, 129, 155, 190, 240, 276]],
+    "Abell (Planétaires)": [f"Abell {i}" for i in [21, 31, 33, 39, 70, 85]],
+    "Arp (Galaxies)": [f"Arp {i}" for i in [244, 188, 273, 297]]
+}
+
+# --- SIDEBAR : CONFIGURATION SETUP ---
 with st.sidebar:
-    st.title("⚙️ Configuration Setup")
+    st.title("🛠️ Mon Setup")
     
-    # --- SECTION ÉNERGIE & PILOTAGE ---
-    with st.expander("⚡ Énergie & Intelligence", expanded=True):
-        batterie = st.selectbox("Batterie", ["Bluetti EB3A (268Wh)", "Ecoflow River 2", "Batterie Marine 100Ah"])
-        pilotage = st.radio("Contrôle", ["ASI AIR Plus", "ASI AIR Mini", "Mini PC (NINA)"], horizontal=True)
-        st.caption("Consommation estimée : 25-35W")
+    with st.expander("🔋 Énergie & Pilotage", expanded=True):
+        bat_capa = st.selectbox("Batterie Nomade", ["Bluetti EB3A (268Wh)", "Ecoflow River 2 (256Wh)", "Batterie 100Ah (1200Wh)"], index=0)
+        wh_total = 268 if "EB3A" in bat_capa else (256 if "River" in bat_capa else 1200)
+        pilotage = st.selectbox("Contrôle", ["ASI AIR Plus", "ASI AIR Mini", "Mini PC (NINA)"])
+        conso_base = 15 if "Plus" in pilotage else 10 # Conso ASI AIR + Monture idle
 
-    # --- SECTION IMAGERIE (Caméra & Filtres) ---
-    with st.expander("📸 Train Imageur", expanded=False):
-        cam_principale = st.selectbox("Caméra Principale", ["ZWO ASI2600MC Pro", "ZWO ASI533MC Pro", "ZWO ASI294MC"])
-        filtres = st.multiselect("Filtres en stock", ["Clair / UV-IR", "Svbony SV220", "Optolong L-Pro", "L-Extreme"], default=["Clair / UV-IR"])
-        st.checkbox("Bande chauffante (Caméra)", value=True)
+    with st.expander("📸 Imagerie & Guidage", expanded=True):
+        cam_model = st.selectbox("Caméra Principale", list(CAM_DB.keys()))
+        conso_cam = CAM_DB[cam_model]
+        bandes = st.multiselect("Bandes Chauffantes", ["Lunette Principale", "Lunette Guide"])
+        conso_bandes = len(bandes) * 7 # Env 7W par bande
+        eaf = st.toggle("Focusser Auto (EAF)", value=True)
 
-    # --- SECTION GUIDAGE & FOCUS ---
-    with st.expander("🎯 Guidage & Focus", expanded=False):
-        cam_guidage = st.selectbox("Caméra Guidage", ["ZWO ASI120MM Mini", "ZWO ASI290MM Mini"])
-        focuseur = st.toggle("EAF (Auto Focuser) actif", value=True)
-        st.checkbox("Bande chauffante (Lunette guide)", value=False)
+    with st.expander("🔭 Monture", expanded=False):
+        monture = st.selectbox("Modèle", ["Star Adventurer GTi", "ZWO AM5", "EQ6-R Pro"])
 
-    # --- SECTION MONTURE ---
-    with st.expander("🔭 Monture & Mécanique", expanded=False):
-        monture = st.selectbox("Monture", ["Star Adventurer GTi", "ZWO AM5", "EQ6-R Pro"])
-        st.info(f"Site : Romont (46.65, 6.91)")
+    # CALCUL AUTONOMIE
+    conso_totale = conso_base + conso_cam + conso_bandes + (2 if eaf else 0)
+    autonomie = wh_total / conso_totale
 
-    # --- BOUSSOLE (Toujours visible pour sécurité) ---
     st.divider()
-    st.subheader("🧭 Horizon Local")
-    dirs = ["N", "E", "S", "O"]
-    obs = {d: st.number_input(f"Obstacle {d} (°)", 0, 90, 15) for d in dirs}
+    # --- BOUSSOLE RETOUR ---
+    st.subheader("🧭 Boussole d'Horizon")
+    dirs = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"]
+    obs = {d: st.number_input(f"{d} (°)", 0, 90, 15, key=f"bous_{d}") for d in dirs}
 
-# --- 3. INTERFACE PRINCIPALE ---
-st.title("🔭 Planification de Session")
+# --- INTERFACE PRINCIPALE ---
+st.title("🔭 Planification Expert : Romont")
 
-col_sel, col_vignette, col_conseil = st.columns([1.5, 1, 1])
-
-with col_sel:
-    cat = st.selectbox("📁 Choisir Catalogue", list(CATALOGUES.keys()))
-    target = st.selectbox(f"🎯 Cible dans {cat}", CATALOGUES[cat])
-
-with col_vignette:
-    # LA VIGNETTE CHANGE MAINTENANT !
-    # On simule un changement d'aspect selon le catalogue
-    style = "radial-gradient(circle, #2e3141 0%, #0e1117 100%)"
-    if "Sharpless" in cat: style = "radial-gradient(circle, #4a1111 0%, #0e1117 100%)"
-    if "Arp" in cat: style = "radial-gradient(circle, #11224a 0%, #0e1117 100%)"
+# 1. SÉLECTION CIBLE
+c1, c2 = st.columns([2, 1])
+with c1:
+    col_cat, col_targ = st.columns(2)
+    cat_sel = col_cat.selectbox("Catalogue", list(CATALOGUES.keys()))
+    targ_sel = col_targ.selectbox(f"Objet {cat_sel}", CATALOGUES[cat_sel])
     
-    st.markdown(f"""
-        <div style="height: 120px; border: 2px solid #555; border-radius: 15px; 
-                    background: {style}; display: flex; align-items: center; justify-content: center; flex-direction: column;">
-            <span style="font-size: 40px;">{'✨' if 'M' in target else '🌀'}</span>
-            <b style="color: white;">{target}</b>
-        </div>
-    """, unsafe_allow_html=True)
+    st.info(f"⚡ **Estimation Énergie :** Consommation de **{conso_totale}W**. Autonomie théorique de **{autonomie:.1f} heures**.")
 
-with col_conseil:
-    if "Sharpless" in cat or "NGC 7000" in target:
-        st.warning("💡 Conseil : **SV220** requis")
-    else:
-        st.info("💡 Conseil : **Filtre Clair**")
+with c2:
+    # LA VRAIE VIGNETTE (Via Aladin Lite / DSS2)
+    st.write("**Vraie image (DSS2/Archives)**")
+    # On nettoie le nom pour l'URL
+    img_name = targ_sel.replace(' ', '')
+    st.image(f"https://aladin.u-strasbg.fr/java/nph-aladin.pl?Object={img_name}&Size=20&Output=JPEG", 
+             use_container_width=True, caption=f"Données réelles : {targ_sel}")
 
-# --- 4. ANALYSE DE LA SESSION ---
+# 2. ANALYSE ET GRAPH DE DÉCHARGE
 st.divider()
-c_rep, c_graph = st.columns([1, 1.5])
+res_col, graph_col = st.columns([1, 2])
 
-with c_rep:
-    st.subheader("📋 État du Setup")
-    st.write(f"✅ **Pilotage :** {pilotage}")
-    st.write(f"✅ **Imagerie :** {cam_principale}")
-    st.write(f"✅ **Guidage :** {cam_guidage} + {'EAF' if focuseur else 'Manuel'}")
-    st.write(f"✅ **Monture :** {monture}")
-    st.caption(f"Autonomie estimée sur {batterie} : ~7.5h")
+with res_col:
+    st.subheader("📋 Rapport de Mission")
+    st.write(f"✅ **Cible :** {targ_sel}")
+    st.write(f"✅ **Setup :** {cam_model} / {monture}")
+    if autonomie < 4:
+        st.error(f"⚠️ Batterie faible pour une nuit complète !")
+    else:
+        st.success(f"✔️ Prêt pour une session de {autonomie:.1f}h")
 
-with c_graph:
-    # Courbe de batterie simplifiée
-    t = np.linspace(0, 10, 100)
-    b = np.exp(-t/15) * 100
-    fig, ax = plt.subplots(figsize=(6, 2.5))
-    ax.plot(t, b, color="#00ffd0")
-    ax.set_title("Décharge théorique (%)", color="white", fontsize=10)
+    # Petit rappel Boussole visuel
+    fig_b, ax_b = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(2, 2))
+    angles = np.linspace(0, 2*np.pi, 9)
+    ax_b.fill(angles, [obs[d] for d in dirs] + [obs["N"]], color='red', alpha=0.3)
+    ax_b.set_facecolor('#0e1117'); fig_b.patch.set_facecolor('#0e1117')
+    ax_b.set_yticklabels([]); ax_b.set_xticklabels([])
+    st.pyplot(fig_b)
+
+with graph_col:
+    # Graphique de décharge basé sur ton matériel réel
+    time_axis = np.linspace(0, autonomie, 100)
+    batt_axis = np.linspace(100, 0, 100)
+    fig, ax = plt.subplots(figsize=(8, 3.5))
+    ax.plot(time_axis, batt_axis, color='#00ffd0', lw=3)
+    ax.fill_between(time_axis, batt_axis, color='#00ffd0', alpha=0.1)
+    ax.set_ylabel("% Batterie")
+    ax.set_xlabel("Heures de shooting")
     ax.set_facecolor("#0e1117"); fig.patch.set_facecolor("#0e1117")
-    ax.tick_params(colors='white', labelsize=8)
+    ax.tick_params(colors='white')
     st.pyplot(fig)
