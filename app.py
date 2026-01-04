@@ -1,40 +1,3 @@
-Skip to content
-Navigation Menu
-cricriastro
-astropepites
-
-Type / to search
-Code
-Issues
-Pull requests
-Actions
-Projects
-Wiki
-Security
-Insights
-Settings
-Commit 0018cfc
-cricriastro
-cricriastro
-authored
-31 minutes ago
-Verified
-Update app.py
-main
-1 parent 
-d92736f
- commit 
-0018cfc
-File tree
-Filter files…
-app.py
-1 file changed
-+112
--14
-lines changed
-Search within code
- 
-‎app.py‎
 +112
 -14
 Lines changed: 112 additions & 14 deletions
@@ -196,11 +159,3 @@ with tab5:
     st.code(f"TARGET: {target_name}\nRA: {coord.ra.to_string(unit=u.hour)}\nDEC = {coord.dec.to_string(unit=u.deg)}")
     df = pd.DataFrame([{"name":target_name, "ra":coord.ra.deg, "dec":coord.dec.deg, "alt":round(altaz.alt.deg,1), "az":round(altaz.az.deg,1)}])
     st.download_button("Télécharger CSV", df.to_csv(index=False), file_name="astropepites_target.csv")
-0 commit comments
-Comments
-0
- (0)
-Comment
-You're not receiving notifications from this thread.
-
- 
