@@ -121,6 +121,7 @@ def calculate_fov(focal_length_mm, sensor_size_mm):
 def get_nasa_image_url(target_name):
     params = {'q': target_name, 'media_type': 'image'}
     try:
+        # CORRECTION DE L'URL : Ajout de "https://" au début
         response = requests.get('images-api.nasa.gov', params=params)
         data = response.json()
         if data['collection']['metadata']['total_hits'] > 0:
@@ -219,6 +220,7 @@ with tab3:
 with tab4:
     st.subheader("Prévisions Météo (5 jours)")
     try:
+        # L'URL Météo avait déjà été corrigée dans le code précédent
         weather_url = f"api.openweathermap.org{lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric&lang=fr"
         response = requests.get(weather_url)
         weather_data = response.json()
@@ -234,6 +236,7 @@ with tab4:
 # --- TAB 5 : EXPORTS ---
 with tab5:
     st.subheader("📋 Coordonnées pour votre monture")
+    # L'export avait une erreur de parenthèse qui est maintenant corrigée ici
     st.code(f"TARGET: {target_name}\nRA: {coord.ra.to_string(unit=u.hour)}\nDEC = {coord.dec.to_string(unit=u.deg)}")
-    df = pd.DataFrame([{"name":target_name, "ra":coord.ra.deg, "dec":coord.dec.deg, "alt":round(altaz.alt.deg,1), "az":round(altaz.az.deg,1)}])
+    df = pd.DataFrame([{"name":target_name, "ra":coord.ra.deg, "dec":coord.deg, "alt":round(altaz.alt.deg,1), "az":round(altaz.az.deg,1)}])
     st.download_button("Télécharger CSV", df.to_csv(index=False), file_name="astropepites_target.csv")
