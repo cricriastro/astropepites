@@ -3,125 +3,134 @@ import pandas as pd
 import numpy as np
 import requests
 import matplotlib.pyplot as plt
-from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_sun
+from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_sun, get_moon
 from astropy import units as u
 from astropy.time import Time
 from datetime import datetime, timedelta
 
-# --- CONFIGURATION PAGE ---
-st.set_page_config(page_title="AstroPépites Live", layout="wide")
+# --- CONFIGURATION ---
+st.set_page_config(page_title="AstroPépites : L'App Ultime", layout="wide", page_icon="🔭")
 
-# --- 1. MODULE GPS & TEMPS RÉEL ---
-# Note : Sur navigateur, on utilise une détection IP ou une saisie manuelle simplifiée
-st.sidebar.title("📍 LOCALISATION & GPS")
-if st.sidebar.button("📍 Actualiser ma position GPS"):
-    # Simulation de récupération de coordonnées (utilisez streamlit_js_eval pour du vrai GPS)
-    try:
-        geo = requests.get('https://ipapi.co/json/').json()
-        st.session_state.lat = geo['latitude']
-        st.session_state.lon = geo['longitude']
-        st.sidebar.success(f"Position : {geo['city']} ({st.session_state.lat}, {st.session_state.lon})")
-    except:
-        st.sidebar.error("GPS indisponible, passage en manuel.")
+# --- DATA : CATALOGUES & ÉVÉNEMENTS ---
+DB_OBJECTS = [
+    {"name": "Arp 273 (La Rose)", "cat": "Arp (Raretés)", "type": "Galaxie", "ra": "02h21m28s", "dec": "+39d22m32s", "difficulty": "⭐⭐⭐⭐", "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/Interacting_galaxy_pair_Arp_273_%28captured_by_the_Hubble_Space_Telescope%29.jpg/320px-Interacting_galaxy_pair_Arp_273_%28captured_by_the_Hubble_Space_Telescope%29.jpg"},
+    {"name": "Abell 31", "cat": "Abell (Planétaires)", "type": "Nébuleuse P.", "ra": "08h54m13s", "dec": "+08d53m52s", "difficulty": "⭐⭐⭐⭐⭐", "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/00/Abell_31_nebula.jpg/320px-Abell_31_nebula.jpg"},
+    {"name": "M31 (Andromède)", "cat": "Messier", "type": "Galaxie", "ra": "00h42m44s", "dec": "+41d16m09s", "difficulty": "⭐", "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/M31_09-01-2011.jpg/320px-M31_09-01-2011.jpg"},
+    {"name": "NGC 6960 (Balai de Sorcière)", "cat": "NGC / IC", "type": "Nébuleuse", "ra": "20h45m42s", "dec": "+30d42m30s", "difficulty": "⭐⭐", "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/The_Witch%27s_Broom_Nebula.jpg/320px-The_Witch%27s_Broom_Nebula.jpg"}
+]
 
-lat = st.sidebar.number_input("Latitude", value=st.session_state.get('lat', 48.85))
-lon = st.sidebar.number_input("Longitude", value=st.session_state.get('lon', 2.35))
-location = EarthLocation(lat=lat*u.deg, lon=lon*u.deg)
+FILTERS_DB = ["Svbony SV220", "Optolong L-Pro", "Optolong L-Ultimate", "Antlia ALP-T", "ZWO LRGB", "Tiroir Vide"]
 
-# --- 2. MÉTÉO LIVE & ALERTES ---
+# --- SIDEBAR COMPLÈTE (COLONNE DE GAUCHE) ---
+st.sidebar.title("🛠️ MONITORING SETUP")
+
+with st.sidebar.expander("📍 Localisation & GPS", expanded=True):
+    lat = st.number_input("Latitude", value=48.85)
+    lon = st.number_input("Longitude", value=2.35)
+    location = EarthLocation(lat=lat*u.deg, lon=lon*u.deg)
+
+with st.sidebar.expander("🔭 Mon Matériel", expanded=True):
+    sel_scope = st.text_input("Télescope", "Evolux 62ED")
+    sel_filter = st.selectbox("Filtre installé", FILTERS_DB)
+    batt_wh = st.number_input("Batterie (Wh)", value=268)
+
+with st.sidebar.expander("📚 Catalogues du Monde", expanded=True):
+    show_m = st.checkbox("Messier", value=True)
+    show_ngc = st.checkbox("NGC / IC", value=True)
+    show_arp = st.checkbox("Arp (Raretés)", value=True)
+    show_abell = st.checkbox("Abell (Planétaires)", value=True)
+
+with st.sidebar.expander("🌲 Horizon (Boussole)", expanded=False):
+    h_n = st.slider("Nord", 0, 70, 20)
+    h_e = st.slider("Est", 0, 70, 15)
+    h_s = st.slider("Sud", 0, 70, 10)
+    h_o = st.slider("Ouest", 0, 70, 25)
+
+# --- LOGIQUE MÉTÉO LIVE ---
 st.sidebar.divider()
-st.sidebar.title("☁️ MÉTÉO ASTRO LIVE")
-
-def get_live_weather(lat, lon):
-    url = f"https://www.7timer.info/bin/astro.php?lon={lon}&lat={lat}&ac=0&unit=metric&output=json"
+def get_weather(lat, lon):
     try:
-        data = requests.get(url).json()['dataseries']
-        return data
+        r = requests.get(f"https://www.7timer.info/bin/astro.php?lon={lon}&lat={lat}&ac=0&unit=metric&output=json").json()
+        return r['dataseries'][0]
     except: return None
 
-weather_data = get_live_weather(lat, lon)
+w = get_weather(lat, lon)
+if w:
+    if w['cloudcover'] <= 3: st.sidebar.success("✅ Ciel Clair : Sortez le matériel !")
+    elif w['cloudcover'] <= 6: st.sidebar.warning("⛅ Voilé : Shooting risqué.")
+    else: st.sidebar.error("❌ Couvert : Prévu dégagé dans quelques heures ?")
 
-if weather_data:
-    current = weather_data[0]
-    next_3h = weather_data[1]
+# --- FILTRAGE DES CIBLES ---
+active_cats = []
+if show_m: active_cats.append("Messier")
+if show_ngc: active_cats.append("NGC / IC")
+if show_arp: active_cats.append("Arp (Raretés)")
+if show_abell: active_cats.append("Abell (Planétaires)")
+
+filtered_targets = [t for t in DB_OBJECTS if t["cat"] in active_cats]
+
+# --- INTERFACE PRINCIPALE ---
+st.title("🔭 AstroPépites : Centre de Contrôle Intégral")
+
+tab1, tab2, tab3 = st.tabs(["🎯 Cibles & Filtres", "☄️ Comètes & Éclipses", "👨‍🏫 Coach de Session"])
+
+with tab1:
+    sel_obj_name = st.selectbox("Choisir une cible", [t["name"] for t in filtered_targets])
+    t_data = next(t for t in filtered_targets if t["name"] == sel_obj_name)
     
-    if current['cloudcover'] > 5:
-        if next_3h['cloudcover'] <= 3:
-            st.sidebar.warning("🔔 ALERTE : Ciel couvert, mais ça se dégage dans 3h ! Préparez le setup.")
+    col_vignette, col_details = st.columns([1, 2])
+    with col_vignette:
+        st.image(t_data["img"], caption=t_data["name"])
+    
+    with col_details:
+        st.subheader(f"Infos pour {t_data['name']}")
+        st.write(f"**Type :** {t_data['type']} | **Difficulté :** {t_data['difficulty']}")
+        # Conseil Filtre / Tiroir
+        if "Galaxie" in t_data["type"]:
+            st.info(f"💡 **Conseil Tiroir Svbony :** Pour cette galaxie, privilégiez le **Tiroir Vide** ou un filtre L-Pro pour garder les couleurs.")
         else:
-            st.sidebar.error("❌ Couvert : Pas de shoot possible pour le moment.")
-    else:
-        st.sidebar.success("✅ CIEL CLAIR : Sortez le matériel maintenant !")
+            st.success(f"💡 **Conseil Tiroir Svbony :** Glissez votre **{sel_filter}** pour isoler les détails de cette nébuleuse.")
 
-# --- 3. CALCULATEUR DE LA "MEILLEURE HEURE" (GOLDEN HOUR) ---
-def find_best_time(target_coord, location):
+    # --- GRAPHIQUE VISIBILITÉ ---
+    st.divider()
+    target_coord = SkyCoord(t_data["ra"], t_data["dec"])
     now = Time.now()
-    times = now + np.linspace(0, 15, 150)*u.hour # Analyse sur 15 heures
-    altaz_frame = AltAz(obstime=times, location=location)
-    target_altaz = target_coord.transform_to(altaz_frame)
-    sun_altaz = get_sun(times).transform_to(altaz_frame)
+    times = now + np.linspace(0, 12, 100)*u.hour
+    altaz = target_coord.transform_to(AltAz(obstime=times, location=location))
+    sun_altaz = get_sun(times).transform_to(AltAz(obstime=times, location=location))
     
-    # Critères : Soleil < -12° (crépuscule nautique) et Altitude cible max
-    dark_mask = sun_altaz.alt.deg < -12
-    if not any(dark_mask): return None, None
+    fig, ax = plt.subplots(figsize=(10, 3))
+    ax.plot(np.linspace(0, 12, 100), altaz.alt.deg, color="#00ffcc", lw=3)
+    ax.fill_between(np.linspace(0, 12, 100), 0, 90, where=sun_altaz.alt.deg < -12, color='gray', alpha=0.2, label="Nuit Noire")
+    ax.axhline(15, color="red", linestyle="--", label="Horizon")
+    ax.set_facecolor("#0e1117")
+    fig.patch.set_facecolor("#0e1117")
+    st.pyplot(fig)
+
+with tab2:
+    st.header("☄️ Phénomènes Spéciaux 2026")
+    col_com, col_ecl = st.columns(2)
+    with col_com:
+        st.subheader("Comètes")
+        st.write("- **C/2023 A3** : Rareté 100% (Pépite)")
+        st.write("- **67P/C-G** : Visible en fin de nuit")
+    with col_ecl:
+        st.subheader("Éclipses")
+        st.warning("📅 12 Août 2026 : Éclipse Totale de Soleil")
+        st.write("📅 28 Août 2026 : Éclipse Lunaire Partielle")
+
+with tab3:
+    st.header("👨‍🏫 Stratégie de Shooting")
+    total_h_req = 12 if "Arp" in t_data["cat"] else 6
+    st.metric("Temps total recommandé", f"{total_h_req} heures")
     
-    best_idx = np.argmax(target_altaz.alt.deg[dark_mask])
-    best_time = times[dark_mask][best_idx]
-    best_alt = target_altaz.alt.deg[dark_mask][best_idx]
-    
-    return best_time, best_alt
+    # Calcul Batterie
+    conso = 3.5
+    autonomie = (batt_wh / 12) / conso
+    st.write(f"🔋 Avec votre setup, autonomie de **{autonomie:.1f}h** par nuit.")
+    st.write(f"📅 Il vous faudra **{int(np.ceil(total_h_req/autonomie))} nuits** pour une image parfaite.")
 
-# --- 4. INTERFACE PRINCIPALE ---
-st.title("🔭 AstroPépites : Planificateur Stratégique")
-
-# Base de cibles (extraits)
-targets = {
-    "Arp 273 (La Rose)": "02h21m28s +39d22m32s",
-    "M31 (Andromède)": "00h42m44s +41d16m09s",
-    "Abell 31": "08h54m13s +08d53m52s"
-}
-
-sel_name = st.selectbox("🎯 Choisissez votre cible pour ce soir :", list(targets.keys()))
-coord = SkyCoord(targets[sel_name], frame='icrs')
-
-best_t, best_a = find_best_time(coord, location)
-
-# Affichage du verdict
-st.header(f"📊 Verdict pour {sel_name}")
-col1, col2 = st.columns(2)
-
-with col1:
-    if best_t:
-        local_time = (best_t.datetime + timedelta(hours=1)).strftime("%H:%M")
-        st.metric("Meilleure heure de shoot", local_time)
-        st.write(f"Altitude max dans le noir : **{best_a:.1f}°**")
-    else:
-        st.error("Cible non visible dans le noir complet cette nuit.")
-
-with col2:
-    st.subheader("📋 État du Ciel")
-    if weather_data:
-        st.write(f"Nuages actuels : {current['cloudcover']}/9")
-        st.write(f"Transparence : {current['seeing']}/8")
-
-# --- GRAPHIQUE DYNAMIQUE ---
-st.divider()
-st.subheader("📈 Courbe de hauteur & Fenêtre de tir")
-
-times_plot = Time.now() + np.linspace(0, 12, 100)*u.hour
-altaz_plot = coord.transform_to(AltAz(obstime=times_plot, location=location))
-sun_plot = get_sun(times_plot).transform_to(AltAz(obstime=times_plot, location=location))
-
-fig, ax = plt.subplots(figsize=(10, 4))
-ax.plot(np.linspace(0, 12, 100), altaz_plot.alt.deg, color='#00ffcc', label=sel_name, lw=2)
-# Zone d'obscurité
-dark_zone = sun_plot.alt.deg < -12
-ax.fill_between(np.linspace(0, 12, 100), 0, 90, where=dark_zone, color='gray', alpha=0.2, label="Nuit Noire")
-
-ax.set_facecolor("#0e1117")
-fig.patch.set_facecolor("#0e1117")
-ax.set_ylim(0, 90)
-ax.legend()
-st.pyplot(fig)
-
-st.info("💡 L'heure idéale est le moment où la courbe verte est au plus haut dans la zone grise.")
+# --- NOTIFICATION SONORE ---
+if st.button("🔔 Tester l'alerte de sortie"):
+    st.toast("Il est temps de sortir le matériel !", icon="🔭")
+    st.markdown('<audio autoplay><source src="https://www.soundjay.com/buttons/sounds/button-3.mp3"></audio>', unsafe_allow_html=True)
