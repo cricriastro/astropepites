@@ -2,94 +2,123 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from astropy.coordinates import SkyCoord, AltAz, EarthLocation
+import requests
+from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_sun, get_moon, get_body
 from astropy import units as u
 from astropy.time import Time
+from datetime import datetime, timedelta
 
-# Configuration de la page
-st.set_page_config(page_title="AstroPépites Pro", layout="wide", page_icon="🔭")
+# Configuration Pro
+st.set_page_config(page_title="AstroPépites Expert 2026", layout="wide", page_icon="🔭")
 
-# --- BASES DE DONNÉES COMPLÈTES ---
-POWER_STATIONS = {"Bluetti EB3A (268Wh)": 22, "Jackery 500": 43, "EcoFlow River Pro": 60}
-TELESCOPES = {"Sky-Watcher Evolux 62ED": 400, "Askar FRA400": 400, "72ED": 420, "C8 f/6.3": 1280}
-MOUNTS = {"Star Adventurer GTi": 0.5, "HEQ5": 1.2, "EQ6-R Pro": 1.5}
-CAMERAS = {"ZWO ASI 183 MC Pro": {"w": 13.2, "h": 8.8, "px": 2.4, "cons": 1.5}, "ASI 2600MC": {"w": 23.5, "h": 15.7, "px": 3.76, "cons": 2.0}}
+# --- BASES DE DONNÉES ---
+POWER_STATIONS = {"Bluetti EB3A (268Wh)": 22, "Jackery 500": 43}
+TELESCOPES = {"Sky-Watcher Evolux 62ED": 400, "Askar FRA400": 400, "C8 f/6.3": 1280}
+CAMERAS = {"ZWO ASI 183 MC Pro": {"w": 13.2, "h": 8.8, "px": 2.4, "cons": 1.5}}
 
-# --- SIDEBAR : CONFIGURATION ---
-st.sidebar.title("🛠 CONFIGURATION SETUP")
-sel_scope = st.sidebar.selectbox("Télescope", list(TELESCOPES.keys()))
-sel_mount = st.sidebar.selectbox("Monture", list(MOUNTS.keys()))
-sel_cam = st.sidebar.selectbox("Caméra", list(CAMERAS.keys()))
+# --- SIDEBAR CONFIG ---
+st.sidebar.title("🛠 SETUP & HORIZON")
 sel_ps = st.sidebar.selectbox("Batterie", list(POWER_STATIONS.keys()))
+sel_scope = st.sidebar.selectbox("Tube", list(TELESCOPES.keys()))
+sel_cam = st.sidebar.selectbox("Caméra", list(CAMERAS.keys()))
+h_limit = st.sidebar.slider("Horizon mini (°)", 0, 60, 20)
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("🌲 Horizon Local (Boussole)")
-h_n = st.sidebar.slider("Nord", 0, 60, 15)
-h_e = st.sidebar.slider("Est", 0, 60, 15)
-h_s = st.sidebar.slider("Sud", 0, 60, 15)
-h_o = st.sidebar.slider("Ouest", 0, 60, 15)
+# --- FONCTIONS MÉTÉO & IMAGES ---
+def get_weather(lat, lon):
+    # Utilisation d'une API gratuite (7-timer) adaptée à l'astro
+    url = f"https://www.7timer.info/bin/astro.php?lon={lon}&lat={lat}&ac=0&unit=metric&output=json"
+    try:
+        data = requests.get(url).json()
+        return data['dataseries'][:8] # 2 jours
+    except: return None
 
-# --- CALCULS LOGISTIQUES ---
-cons_totale = MOUNTS[sel_mount] + CAMERAS[sel_cam]["cons"] + 1.5 # + ASIAIR & Dew
-autonomie = POWER_STATIONS[sel_ps] / cons_totale
-resolution = (CAMERAS[sel_cam]["px"] / TELESCOPES[sel_scope]) * 206
+def get_wiki_image(target):
+    # Cherche une vignette sur Wikipedia
+    url = f"https://fr.wikipedia.org/api/rest_v1/page/summary/{target.replace(' ', '_')}"
+    try:
+        r = requests.get(url).json()
+        return r['thumbnail']['source']
+    except: return "https://via.placeholder.com/200?text=No+Photo"
 
-# --- INTERFACE PRINCIPALE ---
-st.title("🔭 AstroPépites : Planificateur Expert")
+# --- LOGIQUE PRINCIPALE ---
+st.title("🔭 AstroPépites : Planificateur Pro 2026")
 
-c1, c2, c3 = st.columns(3)
-c1.metric("⚡ Conso.", f"{cons_totale:.2f} A")
-c2.metric("🔋 Autonomie (Bluetti)", f"{autonomie:.1f} h")
-c3.metric("📏 Échantillonnage", f"{resolution:.2f} \"/px")
+tab1, tab2, tab3, tab4 = st.tabs(["🎯 Cibles & Vignettes", "☁️ Météo Astro", "🪐 Système Solaire", "🗓 Éphémérides 2026"])
 
-# --- RECHERCHE ET VISIBILITÉ ---
-st.header("🎯 Cibles & Visibilité")
-col_lat, col_lon = st.columns(2)
-lat = col_lat.number_input("Latitude", value=48.85)
-lon = col_lon.number_input("Longitude", value=2.35)
-location = EarthLocation(lat=lat*u.deg, lon=lon*u.deg)
+lat, lon = 48.85, 2.35 # Coordonnées par défaut
 now = Time.now()
+location = EarthLocation(lat=lat*u.deg, lon=lon*u.deg)
 
-targets_db = [
-    {"name": "Arp 273 (La Rose)", "ra": "02h21m28s", "dec": "+39d22m32s", "size": 2.1},
-    {"name": "Sh2-132 (Lion)", "ra": "22h18m42s", "dec": "+56d07m24s", "size": 90},
-    {"name": "Abell 39", "ra": "16h27m33s", "dec": "+27d54m33s", "size": 2.5}
-]
+with tab1:
+    st.header("🎯 Sélection de la Pépite")
+    targets_db = [
+        {"name": "M31", "display": "Andromède", "ra": "00h42m44s", "dec": "+41d16m09s"},
+        {"name": "M42", "display": "Nébuleuse d'Orion", "ra": "05h35m17s", "dec": "-05d23m28s"},
+        {"name": "NGC 6960", "display": "Petites Dentelles", "ra": "20h45m42s", "dec": "+30d42m30s"},
+        {"name": "Arp 273", "display": "La Rose de Galaxies", "ra": "02h21m28s", "dec": "+39d22m32s"}
+    ]
+    
+    sel_obj = st.selectbox("Cible", [t['display'] for t in targets_db])
+    t_data = next(t for t in targets_db if t['display'] == sel_obj)
+    
+    col_img, col_info = st.columns([1, 2])
+    with col_img:
+        st.image(get_wiki_image(t_data['name']), width=250, caption=sel_obj)
+    
+    with col_info:
+        coord = SkyCoord(t_data['ra'], t_data['dec'])
+        # Calcul temps de shoot (Altitude > horizon ET Soleil < -12°)
+        times = now + np.linspace(0, 24, 100)*u.hour
+        altaz = coord.transform_to(AltAz(obstime=times, location=location))
+        sun = get_sun(times).transform_to(AltAz(obstime=times, location=location))
+        
+        visible = (altaz.alt.deg > h_limit) & (sun.alt.deg < -12)
+        shoot_hours = np.sum(visible) * (24/100)
+        
+        st.metric("⏳ Fenêtre de shoot cette nuit", f"{shoot_hours:.1f} heures")
+        st.write(f"**Coordonnées :** {t_data['ra']} / {t_data['dec']}")
+        
+        # Boutons d'export
+        st.download_button("💾 Export ASIAIR (CSV)", f"Name,RA,Dec\n{sel_obj},{t_data['ra']},{t_data['dec']}", file_name="target.csv")
 
-sel_target = st.selectbox("Choisir une cible rare", [t["name"] for t in targets_db])
-t_data = next(t for t in targets_db if t["name"] == sel_target)
+with tab2:
+    st.header("☁️ Prévisions Météo Astro (48h)")
+    w_data = get_weather(lat, lon)
+    if w_data:
+        cols = st.columns(len(w_data))
+        for i, d in enumerate(w_data):
+            with cols[i]:
+                st.write(f"+{d['timepoint']}h")
+                st.info(f"☁️ {d['cloudcover']}")
+                st.caption(f"Temp: {d['temp2m']}°C")
+    else:
+        st.error("Météo indisponible.")
 
-# --- GRAPHIQUE DE VISIBILITÉ ---
-coord = SkyCoord(t_data["ra"], t_data["dec"])
-times = now + np.linspace(0, 12, 50)*u.hour
-altaz = coord.transform_to(AltAz(obstime=times, location=location))
+with tab3:
+    st.header("🪐 Planètes & Comètes")
+    planets = ['Mars', 'Jupiter', 'Saturn']
+    p_cols = st.columns(len(planets))
+    for i, p in enumerate(planets):
+        p_coord = get_body(p, now, location)
+        p_altaz = p_coord.transform_to(AltAz(obstime=now, location=location))
+        with p_cols[i]:
+            st.write(f"**{p}**")
+            st.write(f"Alt: {p_altaz.alt.deg:.1f}°")
+            if p_altaz.alt.deg > 0: st.success("Visible")
+            else: st.error("Sous l'horizon")
 
-fig, ax = plt.subplots(figsize=(10, 3))
-ax.plot(np.linspace(0, 12, 50), altaz.alt.deg, color="#00ffcc", lw=2)
-ax.axhline(15, color="red", linestyle="--", label="Horizon")
-ax.set_facecolor("#0e1117")
-fig.patch.set_facecolor("#0e1117")
-ax.tick_params(colors='white')
-ax.set_ylabel("Altitude (°)", color="white")
-st.pyplot(fig)
+with tab4:
+    st.header("🗓 Événements Majeurs 2026")
+    events = [
+        {"Date": "17 Février 2026", "Event": "Occultation de Saturne par la Lune"},
+        {"Date": "12 Août 2026", "Event": "ÉCLIPSE TOTALE DE SOLEIL (Espagne/Islande)"},
+        {"Date": "28 Août 2026", "Event": "Éclipse Lunaire Partielle"},
+        {"Date": "Octobre 2026", "Event": "Pic des Orionides (Météores)"}
+    ]
+    st.table(events)
 
-# --- EXPORT ASIAIR & MAIL ---
 st.divider()
-st.subheader("📲 Transfert vers ASIAIR")
-
-# Correction de l'erreur TypeError mailto
-mail_body = f"Cible: {sel_target}\nRA: {t_data['ra']}\nDEC: {t_data['dec']}\n\nBon shoot !"
-subject = f"Cible Astro: {sel_target}"
-# Encodage simple pour éviter les erreurs de caractères
-mailto_url = f"mailto:?subject={subject}&body={mail_body}".replace(" ", "%20").replace("\n", "%0A")
-
-col_a, col_b = st.columns(2)
-with col_a:
-    st.text_input("Coordonnées à copier :", f"{t_data['ra']} | {t_data['dec']}")
-    st.markdown(f'<a href="{mailto_url}"><button style="width:100%; padding:10px; border-radius:10px; background-color:#ff4b4b; color:white; border:none; cursor:pointer;">📧 Envoyer par Mail</button></a>', unsafe_allow_html=True)
-
-with col_b:
-    csv = f"Name,RA,Dec\n{sel_target},{t_data['ra']},{t_data['dec']}"
-    st.download_button("💾 Télécharger CSV ASIAIR", csv, file_name=f"{sel_target}.csv")
-
-st.caption("AstroPépites v4.0 - Optimisé pour Evolux 62ED & Bluetti EB3A")
+# Logistique Batterie
+amps = MOUNTS[sel_mount] + CAMERAS[sel_cam]['cons'] + 1.5
+autonomie = POWER_STATIONS[sel_ps] / amps
+st.write(f"🔋 Avec ta **{sel_ps}**, tu peux tenir **{autonomie:.1f}h** en shootant **{sel_obj}**.")
