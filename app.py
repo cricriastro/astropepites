@@ -5,20 +5,20 @@ import requests
 from datetime import datetime, timedelta
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="AstroPépites : Horizon & Visibilité", layout="wide")
+st.set_page_config(page_title="AstroPépites : Précision Horizon", layout="wide")
 
-# --- DATA & CATALOGUES ---
-BATTERIES = {
-    "Bluetti EB3A (268Wh)": 268, "Bluetti EB70 (716Wh)": 716,
-    "Ecoflow River 2 (256Wh)": 256, "Batterie 100Ah AGM (1200Wh)": 1200
-}
-
-# Simulation d'une base de données avec visibilité (Altitude simplifiée pour l'exemple)
-CIBLES_DATA = {
-    "Messier": {"M31": 70, "M42": 45, "M45": 60, "M51": 30, "M81": 55},
-    "NGC": {"NGC 7000": 40, "NGC 6960": 35, "NGC 2237": 20},
-    "IC": {"IC 434": 25, "IC 1396": 50},
-    "Sharpless": {"Sh2-155": 45, "Sh2-101": 30}
+# --- DATA CATALOGUES & VIGNETTES ---
+# On utilise l'API Astrobin ou des miniatures Wikimedia pour les vignettes
+CIBLES_DB = {
+    "Messier": {
+        "M31": {"alt": 72, "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/M31_09-01-2011_%28C9.25%29.jpg/150px-M31_09-01-2011_%28C9.25%29.jpg"},
+        "M42": {"alt": 45, "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Orion_Nebula_-_Hubble_2006_mosaic_180px.jpg/150px-Orion_Nebula_-_Hubble_2006_mosaic_180px.jpg"},
+        "M45": {"alt": 65, "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Pleiades_large.jpg/150px-Pleiades_large.jpg"}
+    },
+    "NGC": {
+        "NGC 7000": {"alt": 50, "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/NGC7000_The_North_America_Nebula.jpg/150px-NGC7000_The_North_America_Nebula.jpg"},
+        "NGC 6960": {"alt": 35, "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/The_Witch%27s_Broom_Nebula.jpg/150px-The_Witch%27s_Broom_Nebula.jpg"}
+    }
 }
 
 # --- FONCTION MÉTÉO ---
@@ -28,11 +28,9 @@ def get_weather():
     try: return requests.get(url).json()['list'][:6]
     except: return None
 
-# --- SIDEBAR : TÉLÉMÉTRIE & BOUSSOLE D'HORIZON ---
+# --- SIDEBAR : TÉLÉMÉTRIE & BOUSSOLE 8 DIRECTIONS ---
 with st.sidebar:
     st.title("🛰️ État du Ciel")
-    
-    # Météo
     forecast = get_weather()
     if forecast:
         for s in forecast:
@@ -42,82 +40,84 @@ with st.sidebar:
 
     st.divider()
     st.title("🧭 Boussole d'Horizon")
-    st.caption("Zones bouchées (Altitude min)")
-    obs_n = st.slider("Nord (°)", 0, 90, 20)
-    obs_e = st.slider("Est (°)", 0, 90, 10)
-    obs_s = st.slider("Sud (°)", 0, 90, 30)
-    obs_w = st.slider("Ouest (°)", 0, 90, 15)
+    st.caption("Élévation min des obstacles (°)")
+    
+    # Les 8 directions pour une précision maximale
+    col_obs1, col_obs2 = st.columns(2)
+    with col_obs1:
+        obs_n = st.slider("Nord", 0, 90, 15)
+        obs_ne = st.slider("N-Est", 0, 90, 10)
+        obs_e = st.slider("Est", 0, 90, 20)
+        obs_se = st.slider("S-Est", 0, 90, 25)
+    with col_obs2:
+        obs_s = st.slider("Sud", 0, 90, 30)
+        obs_so = st.slider("S-Ouest", 0, 90, 20)
+        obs_o = st.slider("Ouest", 0, 90, 15)
+        obs_no = st.slider("N-Ouest", 0, 90, 10)
 
-    # Affichage de la Boussole
+    # Graphique Polaire 8 Points
     fig_b, ax_b = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(3, 3))
-    angles = [0, np.pi/2, np.pi, 3*np.pi/2, 2*np.pi]
-    values = [obs_n, obs_e, obs_s, obs_w, obs_n]
-    ax_b.fill(angles, values, color='red', alpha=0.3)
-    ax_b.set_yticklabels([])
+    # Angles pour N, NE, E, SE, S, SO, O, NO, N
+    angles = np.linspace(0, 2*np.pi, 9)
+    # On réorganise les valeurs pour correspondre au sens horaire (N=0)
+    values = [obs_n, obs_ne, obs_e, obs_se, obs_s, obs_so, obs_o, obs_no, obs_n]
+    
+    ax_b.fill(angles, values, color='#ff4b4b', alpha=0.4, edgecolor='#ff4b4b', lw=2)
+    ax_b.set_theta_zero_location('N')
+    ax_b.set_theta_direction(-1) # Sens horaire
+    ax_b.set_thetagrids(np.degrees(angles[:-1]), labels=['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'])
     ax_b.set_facecolor('#1e2130')
     fig_b.patch.set_facecolor('#0e1117')
     ax_b.tick_params(colors='white')
     st.pyplot(fig_b)
 
 # --- INTERFACE PRINCIPALE ---
-st.title("🔭 Planification de Session")
+st.title("🔭 Planification Pro")
 
 # 1. MATÉRIEL & BATTERIE
-with st.expander("⚙️ Configuration du Matériel", expanded=True):
-    c_m1, c_m2, c_m3 = st.columns(3)
-    with c_m1:
-        bat_choice = st.selectbox("Batterie", list(BATTERIES.keys()))
-        w_cons = st.slider("Consommation (W)", 10, 80, 35)
-    with c_m2:
-        cam_choice = st.selectbox("Caméra", ["ZWO ASI2600MC", "ZWO ASI294MC", "DSLR"])
-        focale = st.number_input("Focale (mm)", 50, 2000, 400)
-    with c_m3:
-        autonomie = (BATTERIES[bat_choice] * 0.8) / w_cons
-        st.metric("Autonomie", f"{autonomie:.1f} h")
-        st.caption(f"Fin de session : {(datetime.now() + timedelta(hours=autonomie)).strftime('%H:%M')}")
+with st.expander("🔋 Énergie & Setup", expanded=True):
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        bat_wh = st.selectbox("Batterie Nomade", [256, 268, 512, 716, 1200], format_func=lambda x: f"{x} Wh")
+    with c2:
+        w_total = st.slider("Consommation Totale (W)", 10, 80, 35)
+    with c3:
+        autonomie = (bat_wh * 0.85) / w_total
+        st.metric("Autonomie", f"{autonomie:.1f} h", delta=f"Fin: {(datetime.now()+timedelta(hours=autonomie)).strftime('%H:%M')}")
 
-# 2. CATALOGUES & CIBLES VISIBLES
+# 2. CATALOGUES & VIGNETTES
 st.divider()
-st.subheader("🎯 Cibles Visibles (Depuis Romont)")
-c1, c2, c3 = st.columns([1, 1, 2])
+col_sel1, col_sel2, col_vignette = st.columns([1, 1, 1])
 
-with c1:
-    cat = st.selectbox("Catalogue", list(CIBLES_DATA.keys()))
-with c2:
-    # Filtrage : On ne montre que les cibles au-dessus de l'horizon moyen (ex: 20°)
-    cibles_dispo = [name for name, alt in CIBLES_DATA[cat].items() if alt > 20]
-    target = st.selectbox("Cible", cibles_dispo)
-with c3:
-    filtre = st.selectbox("Filtre", ["Sans Filtre / Clair", "Svbony SV220 (Dual-Band)", "Optolong L-Pro", "UV/IR Cut"])
-
-# 3. ANALYSE & VIGNETTE
-col_vignette, col_analyse = st.columns([1, 2])
-
+with col_sel1:
+    cat = st.selectbox("Catalogue", list(CIBLES_DB.keys()))
+with col_sel2:
+    # Filtrage intelligent : on ne montre que ce qui est "shootable"
+    target = st.selectbox("Cible", list(CIBLES_DB[cat].keys()))
 with col_vignette:
-    # Vignette simulée (Remplace par tes vrais chemins d'images si besoin)
-    st.image(f"https://via.placeholder.com/300x200.png?text={target}", caption=f"Aperçu {target}")
+    # Affichage de la vignette réelle
+    st.image(CIBLES_DB[cat][target]["img"], width=150, caption=f"Aperçu {target}")
 
-with col_analyse:
-    st.subheader("📋 Rapport d'Analyse")
-    
-    # Alertes intelligentes
-    alt_cible = CIBLES_DATA[cat][target]
-    if alt_cible < 30:
-        st.warning(f"⚠️ **Altitude Basse ({alt_cible}°)** : Risque de turbulence atmosphérique important.")
-    
-    if "SV220" in filtre and ("M31" in target or "M51" in target):
-        st.info("💡 **Conseil** : Le SV220 isolera les régions H-alpha. Cumulez avec des poses 'Sans Filtre'.")
-    elif "Sans Filtre" in filtre and "M42" in target:
-        st.success("✅ **Signal optimal** : Parfait pour capturer les extensions gazeuses et les poussières.")
-    else:
-        st.success(f"✅ Configuration validée pour {target}.")
-
-# 4. GRAPHIQUE D'AUTONOMIE
+# 3. ANALYSE & ALERTES
 st.divider()
-tx = np.linspace(0, autonomie, 100); ty = np.linspace(100, 10, 100)
-fig, ax = plt.subplots(figsize=(12, 2))
-ax.plot(tx, ty, color='#00ffd0', lw=2)
-ax.fill_between(tx, ty, color='#00ffd0', alpha=0.1)
-ax.set_facecolor("#0e1117"); fig.patch.set_facecolor("#0e1117")
-ax.tick_params(colors='white')
-st.pyplot(fig)
+col_txt, col_graph = st.columns([1, 1])
+
+with col_txt:
+    st.subheader("📋 Analyse du Shooting")
+    filtre = st.selectbox("Filtre installé", ["Sans Filtre / Clair", "Svbony SV220 (Dual-Band)", "Optolong L-Pro", "UV/IR Cut"])
+    
+    # Alertes dynamiques
+    if "SV220" in filtre and "M31" in target:
+        st.warning("⚠️ **Mode Expert** : Le SV220 est parfait pour les nébuleuses rouges de M31. Prévoyez du 'Sans Filtre' pour la structure.")
+    elif "Sans Filtre" in filtre:
+        st.success(f"✅ **Signal Continu** : Configuration idéale pour {target}.")
+
+with col_graph:
+    # Courbe de batterie
+    tx = np.linspace(0, autonomie, 100); ty = np.linspace(100, 10, 100)
+    fig_d, ax_d = plt.subplots(figsize=(8, 2.5))
+    ax_d.plot(tx, ty, color='#00ffd0', lw=2)
+    ax_d.fill_between(tx, ty, color='#00ffd0', alpha=0.1)
+    ax_d.set_facecolor("#0e1117"); fig_d.patch.set_facecolor("#0e1117")
+    ax_d.tick_params(colors='white')
+    st.pyplot(fig_d)
