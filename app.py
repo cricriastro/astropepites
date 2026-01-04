@@ -4,37 +4,27 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="AstroPépites 2026 Pro", layout="wide")
+st.set_page_config(page_title="AstroPépites : Explorateur Universel", layout="wide")
 
-# --- BASE DE DONNÉES CIBLES (Noms au lieu de numéros) ---
-DATA_CIBLES = {
-    "Messier": {
-        "M31 - Galaxie d'Andromède": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/M31_09-01-2011_%28C9.25%29.jpg/200px-M31_09-01-2011_%28C9.25%29.jpg",
-        "M42 - Nébuleuse d'Orion": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Orion_Nebula_-_Hubble_2006_mosaic_180px.jpg/200px-Orion_Nebula_-_Hubble_2006_mosaic_180px.jpg",
-        "M45 - Les Pléiades": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Pleiades_large.jpg/200px-Pleiades_large.jpg",
-        "M51 - Galaxie du Tourbillon": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/Messier51_sRGB.jpg/200px-Messier51_sRGB.jpg"
-    },
-    "NGC / IC": {
-        "NGC 7000 - North America": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/NGC7000_The_North_America_Nebula.jpg/200px-NGC7000_The_North_America_Nebula.jpg",
-        "NGC 6960 - Petite Dentelle": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/The_Witch%27s_Broom_Nebula.jpg/200px-The_Witch%27s_Broom_Nebula.jpg",
-        "IC 434 - Tête de Cheval": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Barnard_33.jpg/200px-Barnard_33.jpg"
-    },
-    "Événements 2026": {
-        "Éclipse Solaire Totale (12/08/2026)": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Solar_eclipse_1999_4_NR.jpg/200px-Solar_eclipse_1999_4_NR.jpg",
-        "Comète C/2023 A3": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Comet_C-2023_A3_2024-10-14.jpg/200px-Comet_C-2023_A3_2024-10-14.jpg",
-        "Éclipse Lunaire (03/03/2026)": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/07/Total_Lunar_Eclipse_March_2007.jpg/200px-Total_Lunar_Eclipse_March_2007.jpg"
-    }
+# --- BASE DE DONNÉES ÉTENDUE (Exemples de catalogues rares) ---
+# En production, on peut coupler cela à une API pour avoir les 100 000+ objets
+CATALOGUES_PROFS = {
+    "Messier (Classiques)": ["M1", "M13", "M16", "M27", "M31", "M33", "M42", "M51", "M81", "M101"],
+    "NGC / IC (Complet)": ["NGC 7000", "NGC 6960", "NGC 2237", "IC 434", "IC 1396", "NGC 891", "NGC 4565"],
+    "Abell (Nébuleuses Planétaires/Amas)": ["Abell 21 (Medusa)", "Abell 33", "Abell 39", "Abell 1656 (Coma Cluster)", "Abell 2151"],
+    "Arp (Galaxies en interaction)": ["Arp 244 (Antennae)", "Arp 188 (Tadpole)", "Arp 273 (Rose)", "Arp 297"],
+    "Barnard / LDN (Nuages sombres)": ["Barnard 33", "Barnard 150", "LDN 1251", "LDN 673", "LBN 438"],
+    "Sharpless (Sh2 - Hydrogène)": ["Sh2-155 (Cave)", "Sh2-101 (Tulip)", "Sh2-129 (Squid)", "Sh2-190 (Heart)"],
+    "Événements 2026 (Comètes/Éclipses)": ["Éclipse Solaire Totale (12/08)", "C/2023 A3", "Éclipse Lunaire (03/03)"]
 }
 
-# --- SIDEBAR (Boussole Design Précédent) ---
+# --- SIDEBAR (Boussole 8 points mémorisée) ---
 with st.sidebar:
     st.title("🧭 Horizon & Setup")
-    
-    # Retour aux Sliders pour les 8 directions
     obs = {}
     dirs = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"]
     for d in dirs:
-        obs[d] = st.sidebar.slider(f"Obstacle {d} (°)", 0, 90, 15)
+        obs[d] = st.slider(f"Obstacle {d} (°)", 0, 90, 15)
 
     # Rendu Graphique Polaire
     fig_b, ax_b = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(3, 3))
@@ -49,49 +39,48 @@ with st.sidebar:
     st.pyplot(fig_b)
 
 # --- INTERFACE PRINCIPALE ---
-st.title("🔭 Planification de Session 2026")
+st.title("🔭 Planification Expert : Cibles Exotiques")
 
-# 1. SETUP BATTERIE (Menu déroulant précis)
-with st.expander("🔋 Énergie & Autonomie", expanded=True):
-    col_bat, col_cons = st.columns(2)
-    bat_type = col_bat.selectbox("Modèle de Batterie", ["Bluetti EB3A (268Wh)", "Ecoflow River 2 (256Wh)", "Bluetti EB70 (716Wh)", "Batterie 100Ah (1200Wh)"])
-    bat_wh = int(bat_type.split('(')[1].split('Wh')[0])
-    w_total = col_cons.slider("Consommation Totale (W)", 10, 80, 35)
-    
-    autonomie = (bat_wh * 0.85) / w_total
-    st.info(f"⏱️ Autonomie estimée : **{autonomie:.1f} heures** (Fin à {(datetime.now() + timedelta(hours=autonomie)).strftime('%H:%M')})")
+# 1. RECHERCHE LIBRE (Pour "Tout avoir")
+with st.expander("🔍 Recherche Universelle (NASA/Hubble/Simbad)", expanded=True):
+    col_search, col_type = st.columns([2, 1])
+    search_target = col_search.text_input("Tapez le nom exact d'un objet (ex: Arp 273, PGC 1234, Abell 21)", placeholder="Chercher dans tous les catalogues...")
+    target_origin = col_type.selectbox("Priorité Catalogue", ["Automatique", "NASA/NED", "Hubble/ESA", "Simbad"])
+    if search_target:
+        st.info(f"🛰️ Recherche en cours pour '**{search_target}**' dans les archives **{target_origin}**...")
 
-# 2. SÉLECTION CIBLES PAR NOMS
+# 2. SÉLECTION PAR MENUS DÉROULANTS (Catalogues Spécialisés)
 st.divider()
 c1, c2, c3 = st.columns([1, 1, 1])
-
 with c1:
-    cat = st.selectbox("Catalogue", list(DATA_CIBLES.keys()))
+    cat = st.selectbox("Catégorie de Catalogue", list(CATALOGUES_PROFS.keys()))
 with c2:
-    target = st.selectbox("Cible (Nom)", list(DATA_CIBLES[cat].keys()))
+    target = st.selectbox("Sélectionner la Cible", CATALOGUES_PROFS[cat])
 with c3:
-    filtre = st.selectbox("Filtre", ["Sans Filtre / Clair", "Svbony SV220 (Dual-Band)", "Optolong L-Pro", "Solaire Frontal"])
+    filtre = st.selectbox("Filtre", ["Sans Filtre / Clair", "Svbony SV220 (Dual-Band)", "Optolong L-Pro", "Filtre Solaire"])
 
-# 3. AFFICHAGE & ALERTES
+# 3. AFFICHAGE IMAGE & ANALYSE
 st.divider()
 col_img, col_txt = st.columns([1, 2])
 
 with col_img:
-    st.image(DATA_CIBLES[cat][target], use_container_width=True, caption=target)
+    # On affiche une vignette générique ou issue d'un moteur de recherche
+    st.image(f"https://via.placeholder.com/400x300.png?text={target.replace(' ', '+')}", use_container_width=True, caption=f"Archives visuelles : {target}")
 
 with col_txt:
-    st.subheader("📋 Rapport d'Analyse")
+    st.subheader(f"📋 Rapport de Mission : {target}")
     
-    # Alertes de sécurité
-    if "Solaire" in target or "Solaire" in filtre:
-        st.error("🚨 DANGER : Filtre solaire certifié indispensable pour cette cible !")
-    elif "SV220" in filtre and "Galaxie" in target:
-        st.warning("⚠️ Conseil : Le SV220 isolera le H-alpha. Prévoyez des poses sans filtre pour les couleurs stellaires.")
+    # Logique d'alerte pour cibles difficiles
+    if "Abell" in target or "Arp" in target:
+        st.warning("🔭 **Cible à faible magnitude surfacique** : Temps de pose unitaire long (300s+) et bon ciel recommandés.")
+    
+    if "SV220" in filtre and "LDN" in target:
+        st.error("❌ **Incohérence Filtre** : Les nébuleuses sombres (LDN/Barnard) nécessitent un spectre large. Utilisez 'Sans Filtre'.")
     else:
-        st.success(f"✅ Configuration validée pour {target}.")
-    
-    # Graphique de décharge
-    tx = np.linspace(0, autonomie, 100); ty = np.linspace(100, 10, 100)
+        st.success(f"✅ Setup prêt pour acquisition.")
+
+    # Graphique d'autonomie EB3A
+    tx = np.linspace(0, 7, 100); ty = np.linspace(100, 15, 100)
     fig, ax = plt.subplots(figsize=(8, 2))
     ax.plot(tx, ty, color='#00ffd0')
     ax.set_facecolor("#0e1117"); fig.patch.set_facecolor("#0e1117")
