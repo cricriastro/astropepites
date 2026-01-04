@@ -7,114 +7,104 @@ from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_body
 from astropy import units as u
 from astropy.time import Time
 
-# --- CONFIGURATION ---
-st.set_page_config(page_title="AstroPépites Ultimate 2026", layout="wide")
+# --- CONFIGURATION STYLE ---
+st.set_page_config(page_title="AstroPépites Master", layout="wide")
+st.markdown("""<style> .main { background-color: #0e1117; } .stMetric { background-color: #1a1c24; padding: 10px; border-radius: 10px; } </style>""", unsafe_allow_html=True)
 
-# Données Météo (Romont)
-API_KEY = "16f68f1e07fea20e39f52de079037925"
-LAT, LON = 46.65, 6.91
+# --- BASE DE DONNÉES MATÉRIEL ---
+FILTERS_DB = ["Svbony SV220 (Dual-Band)", "Optolong L-Pro", "Optolong L-Extreme", "Optolong L-Ultimate", "Antlia ALP-T Dual Band", "Antlia Triband RGB", "ZWO Duo-Band", "IDAS NBZ", "UV/IR Cut"]
+POWER_DB = {"Bluetti EB3A": 268, "Bluetti EB70": 716, "EcoFlow River 2": 256, "EcoFlow River Pro": 720, "Jackery 240": 240}
+TUBES_DB = ["Sky-Watcher Evolux 62ED", "Sky-Watcher 72ED", "Askar FRA400", "RedCat 51", "SharpStar 61EDPH"]
 
-# --- BASE DE DONNÉES DU MARCHÉ ---
-EQUIPMENT = {
-    "Télescopes": ["Sky-Watcher Evolux 62ED", "Sky-Watcher 72ED", "Askar FRA400", "ZWO Seestar S50", "William Optics RedCat 51"],
-    "Filtres": ["Svbony SV220 (Dual-Band)", "Optolong L-Pro", "Optolong L-Extreme", "Antlia ALP-T", "ZWO Duo-Band", "UV/IR Cut (Vide)"],
-    "Batteries": ["Bluetti EB3A (268Wh)", "Bluetti EB70 (716Wh)", "EcoFlow River 2", "Jackery 240"]
-}
+# --- SIDEBAR : LE SETUP COMPLET ---
+st.sidebar.title("🔭 SETUP CONFIGURATOR")
 
-CATALOG = [
-    {"name": "M42 Orion", "ra": "05h35m17s", "dec": "-05d23m28s", "type": "Nébuleuse", "mag": 4.0, "img": "https://nova.astrometry.net/image/16654271"},
-    {"name": "M31 Andromède", "ra": "00h42m44s", "dec": "+41d16m09s", "type": "Galaxie", "mag": 3.4, "img": "https://nova.astrometry.net/image/16654272"},
-    {"name": "C/2023 A3 (Comète)", "ra": "18h40m00s", "dec": "+05h00m00s", "type": "Comète", "mag": 5.0, "img": "https://nova.astrometry.net/image/16654273"}
-]
+with st.sidebar.expander("🛠️ Optique & Caméra", expanded=True):
+    tube = st.selectbox("Tube Optique", TUBES_DB)
+    f_nat = st.number_input("Focale Native (mm)", value=400, step=10)
+    reducteur = st.select_slider("Réducteur / Barlow", options=[0.7, 0.75, 0.8, 0.9, 1.0, 1.5, 2.0], value=1.0)
+    f_res = f_nat * reducteur
+    st.caption(f"Focale résultante : {f_res:.1f} mm")
 
-# --- SIDEBAR PRO ---
-st.sidebar.title("👨‍🚀 Dashboard Expert")
+with st.sidebar.expander("🔋 Énergie & Accessoires", expanded=True):
+    bat_choice = st.selectbox("Batterie", list(POWER_DB.keys()))
+    capa_wh = POWER_DB[bat_choice]
+    
+    st.write("**Consommation détaillée (Watts) :**")
+    w_mount = st.number_input("Monture (Suivi)", 5, 20, 8)
+    w_camera = st.number_input("Caméra (Refroidie)", 5, 30, 15)
+    w_asiair = st.number_input("ASIAIR + EAF + Roue", 2, 10, 5)
+    w_heat = st.number_input("Résistances Chauffantes", 0, 40, 12)
+    
+    total_w = w_mount + w_camera + w_asiair + w_heat
+    # Calcul réel avec marge de sécurité de 15%
+    autonomie_h = (capa_wh * 0.85) / total_w
+    st.metric("Autonomie Réelle", f"{autonomie_h:.1f} h", delta=f"-{total_w}W")
 
-with st.sidebar.expander("🔭 Matériel & Optique", expanded=True):
-    tube = st.selectbox("Mon Tube", EQUIPMENT["Télescopes"])
-    focale = st.number_input("Focale Native (mm)", value=400 if "62ED" in tube else 360)
-    # AJOUT DU RÉDUCTEUR / BARLOW
-    ratio = st.select_slider("Correcteur de champ", options=[0.7, 0.8, 0.9, 1.0, 1.5, 2.0], value=1.0)
-    f_finale = focale * ratio
-    st.caption(f"Focale calculée : {f_finale} mm")
+with st.sidebar.expander("🧭 Horizon (Obstacles)", expanded=True):
+    cols = st.columns(2)
+    h_n = cols[0].number_input("N (°)", 0, 80, 15)
+    h_ne = cols[1].number_input("NE (°)", 0, 80, 15)
+    h_e = cols[0].number_input("E (°)", 0, 80, 25)
+    h_se = cols[1].number_input("SE (°)", 0, 80, 10)
+    h_s = cols[0].number_input("S (°)", 0, 80, 5)
+    h_so = cols[1].number_input("SO (°)", 0, 80, 20)
+    h_o = cols[0].number_input("O (°)", 0, 80, 30)
+    h_no = cols[1].number_input("NO (°)", 0, 80, 15)
+    h_map = {"N": h_n, "NE": h_ne, "E": h_e, "SE": h_se, "S": h_s, "SO": h_so, "O": h_o, "NO": h_no}
 
-with st.sidebar.expander("🔋 Énergie & Filtres", expanded=True):
-    filtre_sel = st.selectbox("Filtre utilisé", EQUIPMENT["Filtres"])
-    batterie_sel = st.selectbox("Ma Batterie", EQUIPMENT["Batteries"])
-    capa_wh = 268 if "EB3A" in batterie_sel else 716
-    conso = st.number_input("Consommation totale (W)", value=25)
-    st.metric("Autonomie estimée", f"{capa_wh/conso:.1f} heures")
-
-with st.sidebar.expander("🧭 Horizon (Boussole)", expanded=True):
-    st.write("Réglez les obstacles par secteur :")
-    h = {}
-    # UTILISATION DE NUMBER_INPUT AVEC BOUTONS +/-
-    c1, c2 = st.columns(2)
-    h["N"] = c1.number_input("Nord (°)", 0, 80, 20)
-    h["NE"] = c2.number_input("N-Est (°)", 0, 80, 15)
-    h["E"] = c1.number_input("Est (°)", 0, 80, 25)
-    h["SE"] = c2.number_input("S-Est (°)", 0, 80, 10)
-    h["S"] = c1.number_input("Sud (°)", 0, 80, 5)
-    h["SO"] = c2.number_input("S-Ouest (°)", 0, 80, 20)
-    h["O"] = c1.number_input("Ouest (°)", 0, 80, 30)
-    h["NO"] = c2.number_input("N-Ouest (°)", 0, 80, 15)
-
-# --- ZONE MÉTÉO & ALERTES ---
-st.markdown("### ☁️ État du Ciel & Alertes")
+# --- LOGIQUE MÉTÉO ---
 try:
-    w = requests.get(f"https://api.openweathermap.org/data/2.5/weather?lat={LAT}&lon={LON}&appid={API_KEY}&units=metric").json()
-    met_col1, met_col2, met_col3 = st.columns(3)
-    cloud = w['clouds']['all']
-    hum = w['main']['humidity']
-    temp = w['main']['temp']
-    
-    met_col1.metric("Nuages", f"{cloud}%")
-    met_col2.metric("Humidité", f"{hum}%")
-    met_col3.metric("Température", f"{temp}°C")
+    meteo = requests.get(f"https://api.openweathermap.org/data/2.5/weather?lat=46.65&lon=6.91&appid=16f68f1e07fea20e39f52de079037925&units=metric").json()
+    cloud_cover = meteo['clouds']['all']
+    humidity = meteo['main']['humidity']
+except: cloud_cover, humidity = 50, 50
 
-    if cloud > 40: st.error("❌ Alerte : Trop de nuages pour imager.")
-    elif hum > 85: st.warning("⚠️ Alerte : Humidité critique (Buée imminente !)")
-    else: st.success("✅ Conditions optimales détectées.")
-except:
-    st.info("Connexion météo en attente...")
+# --- INTERFACE PRINCIPALE ---
+st.title("🌌 AstroPépites Pro Dashboard")
 
-# --- LOGIQUE DE VISIBILITÉ ---
-loc = EarthLocation(lat=LAT*u.deg, lon=LON*u.deg)
-now = Time.now()
-visibles = []
-for obj in CATALOG:
-    altaz = SkyCoord(obj["ra"], obj["dec"]).transform_to(AltAz(obstime=now, location=loc))
-    limite = list(h.values())[int(((altaz.az.deg + 22.5) % 360) // 45)]
-    if altaz.alt.deg > limite: visibles.append(obj)
+# Alertes Météo & Energie
+m1, m2, m3 = st.columns(3)
+with m1:
+    st.metric("Météo (Nuages)", f"{cloud_cover}%")
+    if cloud_cover > 40: st.error("⚠️ Trop de nuages")
+with m2:
+    st.metric("Humidité", f"{humidity}%")
+    if humidity > 85: st.warning("⚠️ Buée probable")
+with m3:
+    st.metric("Consommation", f"{total_w} W")
+    if autonomie_h < 5: st.error("⚠️ Batterie faible")
 
-# --- AFFICHAGE PRINCIPAL ---
+# Sélection Cible & Filtre
 st.divider()
-target = st.selectbox("🎯 Choisir la cible (Filtrée par horizon) :", visibles, format_func=lambda x: x['name'])
+c_target, c_filter = st.columns(2)
+with c_target:
+    target_name = st.selectbox("🎯 Cible", ["M42 Orion", "M31 Andromède", "NGC 7000 North America", "C/2023 A3 (Comète)"])
+    filter_used = st.selectbox("💎 Filtre installé", FILTERS_DB)
 
-c_left, c_right = st.columns([1, 1.2])
+# ANALYSE EXPERTE
+st.markdown("### 📋 Analyse du Shooting")
+info_col, graph_col = st.columns([1, 1.5])
 
-with c_left:
-    st.image(target["img"], use_container_width=True, caption=f"Cible : {target['name']}")
-
-with c_right:
-    st.header(f"Analyse Expert : {target['name']}")
-    # LOGIQUE FILTRE
-    if target["type"] in ["Galaxie", "Comète"] and "SV220" in filtre_sel:
-        st.error(f"🚫 ATTENTION : Votre {filtre_sel} bloque le signal ! Retirez-le.")
+with info_col:
+    # Logique Filtre
+    is_galaxy = "Andromède" in target_name or "Comète" in target_name
+    if is_galaxy and "Dual-Band" in filter_used:
+        st.error(f"❌ FILTRE INADAPTÉ : Le {filter_used} bloque le signal continu des galaxies/comètes. Utilisez un filtre UV/IR Cut ou L-Pro.")
     else:
-        st.success(f"💎 Setup Filtre : {filtre_sel} est adapté.")
+        st.success(f"✅ SETUP FILTRE OK : {filter_used} est cohérent.")
     
-    st.write(f"**Type :** {target['type']} | **Magnitude :** {target['mag']}")
-    st.info(f"📸 Pose ASIAIR conseillée : {'120s' if target['mag'] < 6 else '300s'}")
+    st.info(f"📐 Échantillonnage : {(3.76 / f_res) * 206:.2f}\"/pixel")
+    st.write(f"⏱️ Temps de shoot max avec {bat_choice} : **{autonomie_h:.1f} heures**.")
 
-# Rose des vents
-st.subheader("🌹 Horizon Local")
-angles = np.radians([0, 45, 90, 135, 180, 225, 270, 315])
-fig_p, ax_p = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(4,4))
-ax_p.bar(angles, list(h.values()), color='red', alpha=0.5)
-ax_p.bar(angles, [90-v for v in h.values()], bottom=list(h.values()), color='green', alpha=0.3)
-ax_p.set_theta_zero_location('N')
-ax_p.set_theta_direction(-1)
-ax_p.set_facecolor("#0e1117")
-fig_p.patch.set_facecolor("#0e1117")
-st.pyplot(fig_p)
+with graph_col:
+    # Rose des vents compacte
+    angles = np.radians([0, 45, 90, 135, 180, 225, 270, 315])
+    vals = list(h_map.values())
+    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(4,4))
+    ax.bar(angles, vals, color='red', alpha=0.5, width=0.6)
+    ax.bar(angles, [90-v for v in vals], bottom=vals, color='green', alpha=0.3, width=0.6)
+    ax.set_theta_zero_location('N'); ax.set_theta_direction(-1)
+    ax.set_facecolor("#1a1c24"); fig.patch.set_facecolor("#0e1117")
+    ax.tick_params(colors='white')
+    st.pyplot(fig)
