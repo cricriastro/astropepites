@@ -5,75 +5,91 @@ import matplotlib.pyplot as plt
 from astropy.coordinates import SkyCoord, AltAz, EarthLocation
 from astropy import units as u
 from astropy.time import Time
-# Les imports qui posaient problème sont maintenant gérés par le requirements.txt
-try:
-    from astroquery.simbad import Simbad
-    from astroquery.vizier import Vizier
-except ImportError:
-    st.error("L'application installe encore les bibliothèques. Veuillez patienter ou vérifier votre fichier requirements.txt.")
 
-# ==========================================
-# BASES DE DONNÉES (MATÉRIEL & POWER)
-# ==========================================
-POWER_STATIONS = {"Jackery 500": 43, "Bluetti EB3A": 22, "EcoFlow River 2 Pro": 64, "Batterie 100Ah": 100}
-TELESCOPES = {"Sky-Watcher Evolux 62ED": 400, "Askar FRA400": 400, "72ED": 420}
-MOUNTS = {"Star Adventurer GTi": {"cons": 0.5, "max": 5.0}, "EQ6-R Pro": {"cons": 1.5, "max": 20.0}}
-CAMERAS = {"ZWO ASI 183 MC Pro": {"w": 13.2, "h": 8.8, "px": 2.4, "cons": 1.5}}
+# Configuration de la page
+st.set_page_config(page_title="AstroPépites Pro", layout="wide", page_icon="🔭")
 
-# ==========================================
-# INTERFACE
-# ==========================================
+# --- BASES DE DONNÉES COMPLÈTES ---
+POWER_STATIONS = {"Bluetti EB3A (268Wh)": 22, "Jackery 500": 43, "EcoFlow River Pro": 60}
+TELESCOPES = {"Sky-Watcher Evolux 62ED": 400, "Askar FRA400": 400, "72ED": 420, "C8 f/6.3": 1280}
+MOUNTS = {"Star Adventurer GTi": 0.5, "HEQ5": 1.2, "EQ6-R Pro": 1.5}
+CAMERAS = {"ZWO ASI 183 MC Pro": {"w": 13.2, "h": 8.8, "px": 2.4, "cons": 1.5}, "ASI 2600MC": {"w": 23.5, "h": 15.7, "px": 3.76, "cons": 2.0}}
+
+# --- SIDEBAR : CONFIGURATION ---
 st.sidebar.title("🛠 CONFIGURATION SETUP")
 sel_scope = st.sidebar.selectbox("Télescope", list(TELESCOPES.keys()))
 sel_mount = st.sidebar.selectbox("Monture", list(MOUNTS.keys()))
 sel_cam = st.sidebar.selectbox("Caméra", list(CAMERAS.keys()))
 sel_ps = st.sidebar.selectbox("Batterie", list(POWER_STATIONS.keys()))
 
-# Calcul consommation
-cons_totale = MOUNTS[sel_mount]["cons"] + CAMERAS[sel_cam]["cons"] + 1.5 # + ASIAIR & Dew
+st.sidebar.markdown("---")
+st.sidebar.subheader("🌲 Horizon Local (Boussole)")
+h_n = st.sidebar.slider("Nord", 0, 60, 15)
+h_e = st.sidebar.slider("Est", 0, 60, 15)
+h_s = st.sidebar.slider("Sud", 0, 60, 15)
+h_o = st.sidebar.slider("Ouest", 0, 60, 15)
+
+# --- CALCULS LOGISTIQUES ---
+cons_totale = MOUNTS[sel_mount] + CAMERAS[sel_cam]["cons"] + 1.5 # + ASIAIR & Dew
 autonomie = POWER_STATIONS[sel_ps] / cons_totale
+resolution = (CAMERAS[sel_cam]["px"] / TELESCOPES[sel_scope]) * 206
 
-st.title("🔭 AstroPépites : Planificateur Pro")
+# --- INTERFACE PRINCIPALE ---
+st.title("🔭 AstroPépites : Planificateur Expert")
 
-# --- RECHERCHE DE CIBLES ---
-st.header("🎯 Recherche d'objets rares")
+c1, c2, c3 = st.columns(3)
+c1.metric("⚡ Conso.", f"{cons_totale:.2f} A")
+c2.metric("🔋 Autonomie (Bluetti)", f"{autonomie:.1f} h")
+c3.metric("📏 Échantillonnage", f"{resolution:.2f} \"/px")
+
+# --- RECHERCHE ET VISIBILITÉ ---
+st.header("🎯 Cibles & Visibilité")
 col_lat, col_lon = st.columns(2)
 lat = col_lat.number_input("Latitude", value=48.85)
 lon = col_lon.number_input("Longitude", value=2.35)
+location = EarthLocation(lat=lat*u.deg, lon=lon*u.deg)
+now = Time.now()
 
-# Cibles exotiques pré-définies (pour éviter les erreurs d'API au début)
 targets_db = [
-    {"name": "Arp 273", "ra": "02h 21m 28s", "dec": "+39° 22' 32\"", "type": "Galaxies en interaction"},
-    {"name": "Abell 39", "ra": "16h 27m 33s", "dec": "+27° 54' 33\"", "type": "Nébuleuse Planétaire"},
-    {"name": "Sh2-132", "ra": "22h 18m 42s", "dec": "+56° 07' 24\"", "type": "Nébuleuse du Lion"}
+    {"name": "Arp 273 (La Rose)", "ra": "02h21m28s", "dec": "+39d22m32s", "size": 2.1},
+    {"name": "Sh2-132 (Lion)", "ra": "22h18m42s", "dec": "+56d07m24s", "size": 90},
+    {"name": "Abell 39", "ra": "16h27m33s", "dec": "+27d54m33s", "size": 2.5}
 ]
 
-target = st.selectbox("Choisir une cible rare", [t["name"] for t in targets_db])
-target_info = next(t for t in targets_db if t["name"] == target)
+sel_target = st.selectbox("Choisir une cible rare", [t["name"] for t in targets_db])
+t_data = next(t for t in targets_db if t["name"] == sel_target)
 
-# --- VISIBILITÉ & LOGISTIQUE ---
-st.subheader(f"📊 Infos pour {target}")
-c1, c2 = st.columns(2)
-c1.metric("Autonomie Batterie", f"{autonomie:.1f} h")
-c2.metric("Échantillonnage", f"{(CAMERAS[sel_cam]['px']/TELESCOPES[sel_scope])*206:.2f} \"/px")
+# --- GRAPHIQUE DE VISIBILITÉ ---
+coord = SkyCoord(t_data["ra"], t_data["dec"])
+times = now + np.linspace(0, 12, 50)*u.hour
+altaz = coord.transform_to(AltAz(obstime=times, location=location))
 
-# --- EXPORT & ENVOI MAIL ---
+fig, ax = plt.subplots(figsize=(10, 3))
+ax.plot(np.linspace(0, 12, 50), altaz.alt.deg, color="#00ffcc", lw=2)
+ax.axhline(15, color="red", linestyle="--", label="Horizon")
+ax.set_facecolor("#0e1117")
+fig.patch.set_facecolor("#0e1117")
+ax.tick_params(colors='white')
+ax.set_ylabel("Altitude (°)", color="white")
+st.pyplot(fig)
+
+# --- EXPORT ASIAIR & MAIL ---
 st.divider()
-st.subheader("📬 Envoyer vers mon ASIAIR")
+st.subheader("📲 Transfert vers ASIAIR")
 
-# Préparation du texte pour le mail
-mail_body = f"Cible : {target}\nCoordonnees J2000 :\nRA : {target_info['ra']}\nDEC : {target_info['dec']}\n\nGenere par AstroPepites."
-subject = f"Cible Astro : {target}"
-mailto_link = f"mailto:?subject={subject}&body={mail_body.replace(' ', '%20').replace('\n', '%0A')}"
+# Correction de l'erreur TypeError mailto
+mail_body = f"Cible: {sel_target}\nRA: {t_data['ra']}\nDEC: {t_data['dec']}\n\nBon shoot !"
+subject = f"Cible Astro: {sel_target}"
+# Encodage simple pour éviter les erreurs de caractères
+mailto_url = f"mailto:?subject={subject}&body={mail_body}".replace(" ", "%20").replace("\n", "%0A")
 
-col_mail, col_csv = st.columns(2)
+col_a, col_b = st.columns(2)
+with col_a:
+    st.text_input("Coordonnées à copier :", f"{t_data['ra']} | {t_data['dec']}")
+    st.markdown(f'<a href="{mailto_url}"><button style="width:100%; padding:10px; border-radius:10px; background-color:#ff4b4b; color:white; border:none; cursor:pointer;">📧 Envoyer par Mail</button></a>', unsafe_allow_html=True)
 
-with col_mail:
-    st.markdown(f'<a href="{mailto_link}" style="text-decoration:none;"><button style="width:100%; border-radius:5px; background-color:#ff4b4b; color:white; border:none; padding:10px;">📧 Envoyer par Mail</button></a>', unsafe_allow_status=True)
+with col_b:
+    csv = f"Name,RA,Dec\n{sel_target},{t_data['ra']},{t_data['dec']}"
+    st.download_button("💾 Télécharger CSV ASIAIR", csv, file_name=f"{sel_target}.csv")
 
-with col_csv:
-    # Export CSV format ASIAIR
-    csv_str = f"Name,RA,Dec\n{target},{target_info['ra']},{target_info['dec']}"
-    st.download_button("💾 Télécharger CSV (ASIAIR)", csv_str, file_name=f"{target}_asiair.csv", mime="text/csv")
-
-st.info("💡 Le bouton Mail ouvrira votre application de messagerie. Copiez ensuite ces valeurs dans l'onglet 'User Objects' de votre ASIAIR.")
+st.caption("AstroPépites v4.0 - Optimisé pour Evolux 62ED & Bluetti EB3A")
