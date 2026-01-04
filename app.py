@@ -3,66 +3,64 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="AstroPépites : Tactile", layout="wide")
+st.set_page_config(page_title="AstroPépites Pro", layout="wide")
 
-# --- DATA ---
-CAM_DB = {"ZWO ASI2600MC Pro": 20, "ZWO ASI533MC Pro": 15, "ZWO ASI294MC Pro": 18, "Reflex Canon/Sony": 7}
+# --- DATA : MATÉRIEL & CIBLES (Coordonnées simplifiées pour le filtre) ---
+CAM_DB = {"ZWO ASI2600MC Pro": 20, "ZWO ASI533MC Pro": 15, "ASI 120MM Mini (Guide)": 2, "ASI 290MM Mini (Guide)": 3}
 BATTERIES = {"Bluetti EB3A (268Wh)": 268, "Ecoflow River (256Wh)": 256, "Batterie 100Ah": 1280}
-CATALOGUES = {
-    "Messier": [f"M{i}" for i in range(1, 111)],
-    "NGC": ["NGC 7000", "NGC 6960", "NGC 2237", "NGC 891"],
-    "Sharpless": ["Sh2-129", "Sh2-101", "Sh2-155"]
-}
+
+# Liste des cibles avec leur Hauteur Max (Altitude) approximative pour le filtrage
+# (Dans une version réelle, cela serait calculé précisément selon la date)
+DB_CIBLES = [
+    {"nom": "M31 - Andromède", "cat": "Messier", "alt": 80},
+    {"nom": "M42 - Orion", "cat": "Messier", "alt": 35},
+    {"nom": "M51 - Tourbillon", "cat": "Messier", "alt": 75},
+    {"nom": "NGC 7000 - North America", "cat": "NGC", "alt": 85},
+    {"nom": "NGC 6960 - Dentelles", "cat": "NGC", "alt": 70},
+    {"nom": "Sh2-129 - Squid", "cat": "Sharpless", "alt": 65},
+    {"nom": "Sh2-155 - Cave", "cat": "Sharpless", "alt": 60},
+    {"nom": "M8 - Lagune", "cat": "Messier", "alt": 20}, # Cible basse
+    {"nom": "M16 - Piliers", "cat": "Messier", "alt": 25}, # Cible basse
+]
 
 # --- BARRE LATÉRALE ---
 with st.sidebar:
-    st.title("🛰️ Setup Romont")
+    st.title("🛰️ Setup & Horizon")
     
-    with st.expander("🔋 Énergie & Pilotage", expanded=False):
-        bat = st.selectbox("Batterie Nomade", list(BATTERIES.keys()))
-        pilot = st.selectbox("Contrôle", ["ASI AIR Plus", "ASI AIR Mini", "Mini PC"])
-        conso_base = 15 if "Plus" in pilot else 12
+    with st.expander("🔋 Énergie & Caméras", expanded=True):
+        bat = st.selectbox("Batterie", list(BATTERIES.keys()))
+        cam_p = st.selectbox("Caméra Principale", ["ZWO ASI2600MC Pro", "ZWO ASI533MC Pro"])
+        cam_g = st.selectbox("Caméra Guidage", ["ASI 120MM Mini (Guide)", "ASI 290MM Mini (Guide)"])
+        bandes = st.number_input("Bandes chauffantes", 0, 4, 1)
+        
+        # Calcul de la consommation
+        conso_totale = 15 + CAM_DB[cam_p] + CAM_DB[cam_g] + (bandes * 7)
+        h_autonomie = BATTERIES[bat] / conso_totale
 
-    with st.expander("📸 Matériel & Guidage", expanded=False):
-        cam_p = st.selectbox("Caméra", list(CAM_DB.keys()))
-        # Utilisation de boutons + / - pour les bandes
-        bandes = st.number_input("Nombre de bandes chauffantes", 0, 4, 1, step=1)
-        eaf = st.toggle("Focuseur (EAF)", value=True)
-        efw = st.toggle("Roue à filtres (EFW)", value=True)
-
-    # Calcul autonomie
-    conso_w = conso_base + CAM_DB[cam_p] + (bandes * 7) + (2 if eaf else 0) + (1 if efw else 0)
-    h_restant = BATTERIES[bat] / conso_w
-
-    st.divider()
-
-    # --- BOUSSOLE TACTILE (VERTE/ROUGE) ---
-    with st.expander("🧭 Boussole & Horizon", expanded=True):
-        st.write("Glisse pour masquer les zones :")
+    # --- BOUSSOLE INTERACTIVE ---
+    with st.expander("🧭 Boussole d'Horizon", expanded=True):
+        st.write("Règle tes obstacles :")
         dirs = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"]
-        vals = []
-        # Sliders pour éviter de taper des chiffres
+        obs_vals = []
         for d in dirs:
-            vals.append(st.slider(f"Obstacle {d} (°)", 0, 90, 15))
+            obs_vals.append(st.slider(f"{d}", 0, 90, 15))
 
-        # Rendu Graphique
+        # Rendu Graphique Vert/Rouge
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(3, 3))
         angles = np.linspace(0, 2*np.pi, 9)
-        
-        # Zone verte (Ciel complet)
-        ax.fill(angles, [90]*9, color='#2ecc71', alpha=0.3) 
-        
-        # Zone rouge (Obstacles saisis)
-        obs_vals = vals + [vals[0]]
-        ax.fill(angles, obs_vals, color='#e74c3c', alpha=0.8, edgecolor='#c0392b')
-        
+        ax.fill(angles, [90]*9, color='#2ecc71', alpha=0.3) # Ciel Libre
+        ax.fill(angles, obs_vals + [obs_vals[0]], color='#e74c3c', alpha=0.8) # Obstacles
         ax.set_theta_zero_location('N')
         ax.set_theta_direction(-1)
         ax.set_ylim(0, 90)
-        ax.set_facecolor('#0e1117')
-        fig.patch.set_facecolor('#0e1117')
+        ax.set_facecolor('#0e1117'); fig.patch.set_facecolor('#0e1117')
         ax.tick_params(colors='white', labelsize=7)
         st.pyplot(fig)
+
+# --- FILTRAGE DES CIBLES ---
+# On prend la valeur d'obstacle la plus haute pour filtrer (simplification)
+horizon_max = max(obs_vals)
+cibles_visibles = [c['nom'] for c in DB_CIBLES if c['alt'] > horizon_max]
 
 # --- INTERFACE PRINCIPALE ---
 st.title("🔭 Planification de Session")
@@ -70,26 +68,31 @@ st.title("🔭 Planification de Session")
 col_info, col_img = st.columns([2, 1])
 
 with col_info:
-    c1, c2 = st.columns(2)
-    cat_s = c1.selectbox("📁 Catalogue", list(CATALOGUES.keys()))
-    obj_s = c2.selectbox("🎯 Cible", CATALOGUES[cat_s])
-    
-    st.markdown(f"""
-        <div style="background: #1e2130; padding: 25px; border-radius: 15px; border: 2px solid #2ecc71; text-align: center;">
-            <h1 style="color: white; margin: 0;">🔋 {h_restant:.1f} HEURES</h1>
-            <p style="color: #2ecc71; margin: 0;">DURÉE DE SHOOT POSSIBLE</p>
-        </div>
-    """, unsafe_allow_html=True)
+    st.subheader("🎯 Sélection de la cible")
+    if not cibles_visibles:
+        st.error("⚠️ Aucune cible n'est visible au-dessus de tes obstacles actuels !")
+        cible_sel = None
+    else:
+        cible_sel = st.selectbox(f"Cibles visibles (> {horizon_max}° d'altitude)", cibles_visibles)
+        st.success(f"✔️ **AUTONOMIE : {h_autonomie:.1f} HEURES**")
 
 with col_img:
-    st.write("**Vignette de confirmation**")
-    # Tentative avec un serveur d'images plus direct (SkyView)
-    obj_clean = obj_s.replace(" ", "+")
-    url_img = f"https://server1.sky-map.org/imgproxy?object={obj_clean}&view=normal"
-    
-    st.image(url_img, width=280, caption=f"Cible : {obj_s}")
+    st.write("**Aperçu de la cible**")
+    if cible_sel:
+        # Technique robuste pour la vignette : on utilise le catalogue Messier/NGC
+        clean_name = cible_sel.split(' - ')[0].replace(' ', '')
+        # Lien vers les miniatures de la NASA/Hubble
+        url_img = f"https://www.ngcicproject.org/thumbnails/{clean_name.lower()}.jpg"
+        
+        # Affichage avec cadre de secours
+        st.markdown(f"""
+            <div style="border:2px solid #444; border-radius:10px; background:black; min-height:150px; text-align:center;">
+                <img src="{url_img}" style="width:100%; border-radius:8px;" onerror="this.src='https://via.placeholder.com/300x200?text={clean_name}';">
+            </div>
+        """, unsafe_allow_html=True)
 
 st.divider()
-st.subheader("📋 État du Setup")
-st.write(f"✅ **Alimentation :** {bat} | **Consommation :** {conso_w}W")
-st.write(f"✅ **Train Optique :** {cam_p} + {'EAF' if eaf else ''} {'+ EFW' if efw else ''}")
+st.subheader("📋 Résumé du Setup")
+c_a, c_b = st.columns(2)
+c_a.write(f"✅ **Imagerie :** {cam_p} + {cam_g}")
+c_b.write(f"✅ **Énergie :** {bat} ({conso_totale}W consommés)")
