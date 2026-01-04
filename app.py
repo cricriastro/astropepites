@@ -124,7 +124,7 @@ def get_nasa_image_url(target_name):
         response = requests.get('images-api.nasa.gov', params=params)
         data = response.json()
         if data['collection']['metadata']['total_hits'] > 0:
-            image_links_url = data['collection']['items'][0]['href']
+            image_links_url = data['collection']['items']['href']
             links_response = requests.get(image_links_url)
             links_data = links_response.json()
             for link in links_data:
@@ -219,7 +219,6 @@ with tab3:
 with tab4:
     st.subheader("Prévisions Météo (5 jours)")
     try:
-        # CORRECTION DE L'URL : Ajout de "https://"
         weather_url = f"api.openweathermap.org{lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric&lang=fr"
         response = requests.get(weather_url)
         weather_data = response.json()
@@ -238,4 +237,3 @@ with tab5:
     st.code(f"TARGET: {target_name}\nRA: {coord.ra.to_string(unit=u.hour)}\nDEC = {coord.dec.to_string(unit=u.deg)}")
     df = pd.DataFrame([{"name":target_name, "ra":coord.ra.deg, "dec":coord.dec.deg, "alt":round(altaz.alt.deg,1), "az":round(altaz.az.deg,1)}])
     st.download_button("Télécharger CSV", df.to_csv(index=False), file_name="astropepites_target.csv")
-
