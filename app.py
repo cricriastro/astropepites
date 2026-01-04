@@ -2,142 +2,200 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import requests
-from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_sun
+from astropy.coordinates import SkyCoord, AltAz, EarthLocation
 from astropy import units as u
 from astropy.time import Time
-from astroquery.simbad import Simbad
-from astroquery.vizier import Vizier
 
 # ==========================================
-# 1. CONFIGURATION & SESSION STATE
-# ==========================================
-st.set_page_config(page_title="Astro-Logistics Pro", layout="wide")
-
-if 'inventory' not in st.session_state:
-    st.session_state.inventory = {
-        'telescope': {"focal": 400, "aperture": 80},
-        'camera': {"w_mm": 23.5, "h_mm": 15.7, "pixel": 3.76},
-        'battery': {"capacity_ah": 50, "voltage": 12},
-        'consumption': 4.0  # Amps (Monture + Caméra + PC + Résistances)
-    }
-
-# ==========================================
-# 2. FONCTIONS DE RECHERCHE AVANCÉES
+# 1. BASES DE DONNÉES ÉTENDUES (MODE PRO)
 # ==========================================
 
-def search_exotic_targets(lat, lon, radius=10):
-    """Recherche des objets non-conventionnels via Vizier (Catalogue Arp, Abell, Sharpless)"""
-    location = EarthLocation(lat=lat*u.deg, lon=lon*u.deg)
-    now = Time.now()
-    
-    # On cherche des objets de magnitude entre 10 et 15 (plus rares)
-    v = Vizier(columns=['ID', 'RAJ2000', 'DEJ2000', 'mag'], column_filters={"mag": "10..15"})
-    # On limite à Sharpless (Sh2) ou Arp pour l'exotisme
-    try:
-        result = v.query_region(location, radius=radius*u.deg, catalog='VII/20') # Sharpless
-        df = result[0].to_pandas()
-        return df
-    except:
-        # Fallback sur une liste interne si l'API est saturée
-        return pd.DataFrame([
-            {"ID": "Arp 188", "RAJ2000": 241.1, "DEJ2000": 55.4, "mag": 14.4},
-            {"ID": "Sh2-155", "RAJ2000": 344.1, "DEJ2000": 62.1, "mag": 10.0}
-        ])
+POWER_STATIONS = {
+    "Bluetti EB3A (268Wh)": {"ah": 22},
+    "Bluetti EB70 (716Wh)": {"ah": 60},
+    "Jackery Explorer 240 (240Wh)": {"ah": 20},
+    "Jackery Explorer 500 (518Wh)": {"ah": 43},
+    "Jackery Explorer 1000 (1002Wh)": {"ah": 83},
+    "EcoFlow River 2 (256Wh)": {"ah": 21},
+    "EcoFlow River 2 Pro (768Wh)": {"ah": 64},
+    "EcoFlow Delta 2 (1024Wh)": {"ah": 85},
+    "Batterie Lithium DIY 50Ah": {"ah": 50},
+    "Batterie Lithium DIY 100Ah": {"ah": 100},
+    "Batterie Plomb Décharge Lente 100Ah": {"ah": 100}
+}
+
+TELESCOPES = {
+    "Sky-Watcher Evolux 62ED": {"focal": 400, "aperture": 62, "weight": 2.5},
+    "Sky-Watcher Evolux 82ED": {"focal": 530, "aperture": 82, "weight": 3.5},
+    "Sky-Watcher 72ED": {"focal": 420, "aperture": 72, "weight": 2.0},
+    "Sky-Watcher 80ED": {"focal": 600, "aperture": 80, "weight": 3.0},
+    "Askar FRA400": {"focal": 400, "aperture": 72, "weight": 3.2},
+    "Askar FRA500": {"focal": 500, "aperture": 90, "weight": 4.1},
+    "RedCat 51": {"focal": 250, "aperture": 51, "weight": 1.5},
+    "Takahashi FSQ-85EDX": {"focal": 450, "aperture": 85, "weight": 3.6},
+    "Celestron C8 (f/10)": {"focal": 2032, "aperture": 203, "weight": 5.7},
+    "Celestron C8 + Reducteur (f/6.3)": {"focal": 1280, "aperture": 203, "weight": 6.0},
+    "Newton 150/750": {"focal": 750, "aperture": 150, "weight": 5.5},
+    "Newton 200/800": {"focal": 800, "aperture": 200, "weight": 9.0},
+    "Newton 250/1000": {"focal": 1000, "aperture": 250, "weight": 14.0}
+}
+
+MOUNTS = {
+    "Sky-Watcher Star Adventurer GTi": {"track": 0.5, "slew": 1.5, "max": 5.0},
+    "Sky-Watcher Star Adventurer 2i": {"track": 0.1, "slew": 0.2, "max": 5.0},
+    "Sky-Watcher EQ5 Pro": {"track": 1.0, "slew": 2.5, "max": 9.0},
+    "Sky-Watcher HEQ5 Pro": {"track": 1.2, "slew": 3.0, "max": 11.0},
+    "Sky-Watcher EQ6-R Pro": {"track": 1.5, "slew": 4.0, "max": 20.0},
+    "ZWO AM3": {"track": 0.5, "slew": 1.5, "max": 8.0},
+    "ZWO AM5": {"track": 0.7, "slew": 2.5, "max": 13.0},
+    "Ioptron GEM28": {"track": 0.8, "slew": 2.0, "max": 12.0}
+}
+
+CAMERAS = {
+    "ZWO ASI 183 MC Pro (Couleur)": {"w": 13.2, "h": 8.8, "px": 2.4, "cons": 1.5},
+    "ZWO ASI 183 MM Pro (Mono)": {"w": 13.2, "h": 8.8, "px": 2.4, "cons": 1.5},
+    "ZWO ASI 2600 MC Pro": {"w": 23.5, "h": 15.7, "px": 3.76, "cons": 2.0},
+    "ZWO ASI 2600 MM Pro": {"w": 23.5, "h": 15.7, "px": 3.76, "cons": 2.0},
+    "ZWO ASI 533 MC Pro": {"w": 11.3, "h": 11.3, "px": 3.76, "cons": 1.5},
+    "ZWO ASI 294 MC Pro": {"w": 19.1, "h": 13.0, "px": 4.63, "cons": 1.8},
+    "ZWO ASI 1600 MM Pro": {"w": 17.7, "h": 13.4, "px": 3.8, "cons": 1.5},
+    "ZWO ASI 071 MC Pro": {"w": 23.6, "h": 15.6, "px": 4.78, "cons": 2.0},
+    "ZWO ASI 2400 MC Pro (Full)": {"w": 36.0, "h": 24.0, "px": 5.94, "cons": 2.2},
+    "ZWO ASI 6200 MC Pro (Full)": {"w": 36.0, "h": 24.0, "px": 3.76, "cons": 2.5},
+    "QHY 268C": {"w": 23.5, "h": 15.7, "px": 3.76, "cons": 2.0},
+    "Canon EOS 6D (Full Frame)": {"w": 36.0, "h": 24.0, "px": 6.54, "cons": 0.6},
+    "Canon EOS 80D / 90D / 800D": {"w": 22.3, "h": 14.9, "px": 3.7, "cons": 0.5},
+    "Nikon D850 / Z7 (Full Frame)": {"w": 35.9, "h": 23.9, "px": 4.35, "cons": 0.7},
+    "Sony A7 III (Full Frame)": {"w": 35.6, "h": 23.8, "px": 5.9, "cons": 0.7}
+}
 
 # ==========================================
-# 3. INTERFACE : INVENTAIRE MATÉRIEL
+# 2. INTERFACE STREAMLIT
 # ==========================================
-with st.sidebar:
-    st.title("📦 Mon Inventaire")
-    with st.expander("🔭 Optique & Caméra"):
-        foc = st.number_input("Focale (mm)", value=st.session_state.inventory['telescope']['focal'])
-        cam_w = st.number_input("Largeur Capteur (mm)", value=st.session_state.inventory['camera']['w_mm'])
-        cam_h = st.number_input("Hauteur Capteur (mm)", value=st.session_state.inventory['camera']['h_mm'])
-        st.session_state.inventory['telescope']['focal'] = foc
-        st.session_state.inventory['camera']['w_mm'] = cam_w
-        st.session_state.inventory['camera']['h_mm'] = cam_h
+st.set_page_config(page_title="AstroPépites Expert", layout="wide")
 
-    with st.expander("⚡ Énergie & Batteries"):
-        batt_ah = st.number_input("Capacité Batterie (Ah)", value=st.session_state.inventory['battery']['capacity_ah'])
-        cons = st.slider("Consommation Totale (Amps)", 0.5, 10.0, 3.5, help="ASIAIR(1A) + Monture(1A) + Refroidissement(1A) + Résistances(0.5A)")
-        st.session_state.inventory['battery']['capacity_ah'] = batt_ah
-        st.session_state.inventory['consumption'] = cons
+st.sidebar.title("🛠 MON SETUP NOMADE")
 
-    st.info(f"🔋 Autonomie estimée : **{batt_ah / cons:.1f} heures**")
+# Section Tube
+st.sidebar.subheader("🔭 Optique")
+sel_scope = st.sidebar.selectbox("Modèle de Télescope", sorted(list(TELESCOPES.keys())))
+scope = TELESCOPES[sel_scope]
+
+# Section Monture
+st.sidebar.subheader("📡 Monture")
+sel_mount = st.sidebar.selectbox("Modèle de Monture", sorted(list(MOUNTS.keys())))
+mount = MOUNTS[sel_mount]
+
+# Section Caméra
+st.sidebar.subheader("📷 Caméra")
+sel_cam = st.sidebar.selectbox("Modèle de Caméra", sorted(list(CAMERAS.keys())))
+cam = CAMERAS[sel_cam]
+
+# Section Énergie
+st.sidebar.subheader("⚡ Énergie")
+sel_ps = st.sidebar.selectbox("Power Station / Batterie", list(POWER_STATIONS.keys()))
+ps = POWER_STATIONS[sel_ps]
+
+# Accessoires
+st.sidebar.subheader("🔌 Accessoires connectés")
+use_asiair = st.sidebar.checkbox("ASIAIR Plus/Mini", value=True)
+use_dew = st.sidebar.checkbox("Résistance chauffante", value=True)
+use_eaf = st.sidebar.checkbox("Focusser EAF", value=True)
 
 # ==========================================
-# 4. INTERFACE PRINCIPALE
+# 3. CALCULS LOGISTIQUES
 # ==========================================
-st.title("🌌 Planificateur de Cibles Exotiques")
 
-tab1, tab2, tab3, tab4 = st.tabs(["🔎 Scanner de Zone", "🖼 Mosaïque & Champ", "🔋 Gestion Énergie", "📋 Export NINA/ASIAIR"])
+# Calcul consommation totale
+total_amps = mount["track"] + cam["cons"]
+if use_asiair: total_amps += 0.8
+if use_dew: total_amps += 0.7
+if use_eaf: total_amps += 0.1
 
-# GPS par défaut
-lat = st.number_input("Ma Latitude (GPS)", value=48.85)
-lon = st.number_input("Ma Longitude (GPS)", value=2.35)
-location = EarthLocation(lat=lat*u.deg, lon=lon*u.deg)
+autonomie_h = ps["ah"] / total_amps
+charge_kg = scope["weight"] + 1.2 # + Caméra, EAF, Cables env 1.2kg
+
+# ==========================================
+# 4. DASHBOARD PRINCIPAL
+# ==========================================
+
+st.title("🌌 AstroPépites Expert : Planificateur")
+
+# Indicateurs clés
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("⚡ Conso. estimée", f"{total_amps:.2f} A")
+c2.metric("🔋 Autonomie", f"{autonomie_h:.1f} h")
+c3.metric("📐 Échantillonnage", f"{(cam['px']/scope['focal'])*206:.2f} \"/px")
+c4.metric("⚖️ Charge Utile", f"{charge_kg:.1f} kg / {mount['max']} kg")
+
+if charge_kg > mount["max"]:
+    st.error(f"⚠️ ATTENTION : Votre setup est trop lourd ({charge_kg:.1f}kg) pour la {sel_mount} (Max {mount['max']}kg) !")
+
+tab1, tab2, tab3 = st.tabs(["🔎 SCANNER DE CIBLES", "📏 CHAMP & MOSAÏQUE", "🔋 ANALYSE ÉLECTRIQUE"])
 
 with tab1:
-    st.subheader("Objets visibles dans votre zone (Cibles rares)")
-    radius = st.slider("Rayon de recherche (degrés)", 5, 50, 20)
+    st.header("🎯 Cibles Exotiques & Rares")
+    col_gps1, col_gps2 = st.columns(2)
+    lat = col_gps1.number_input("Latitude GPS", value=48.85)
+    lon = col_gps2.number_input("Longitude GPS", value=2.35)
     
-    if st.button("Scanner le ciel profond"):
-        with st.spinner("Interrogation des catalogues NASA/VizieR..."):
-            targets = search_exotic_targets(lat, lon, radius)
-            st.write(f"Trouvé {len(targets)} objets peu communs dans le rayon de {radius}°")
-            st.dataframe(targets)
+    st.write("### Cibles conseillées pour votre setup actuel :")
+    
+    # Logique de conseil selon la focale
+    if scope["focal"] <= 400:
+        cat_type = "Nébuleuses étendues (Sharpless / Barnard)"
+        targets = [
+            {"Nom": "Sh2-132 (Nébuleuse du Lion)", "Type": "Émission", "Rare": "Oui", "Note": "Superbe en HOO"},
+            {"Nom": "IC 1396 (Trompe d'Éléphant)", "Type": "Nébuleuse", "Rare": "Non", "Note": "Tient pile dans le champ"},
+            {"Nom": "LDN 1251 (Nébuleuse Sombre)", "Type": "Poussière", "Rare": "Très", "Note": "Défi ciel pur"}
+        ]
+    else:
+        cat_type = "Galaxies lointaines & Interaction (Arp)"
+        targets = [
+            {"Nom": "Arp 273 (La Rose)", "Type": "Galaxies", "Rare": "Oui", "Note": "Nécessite bon suivi"},
+            {"Nom": "NGC 5907 (Galaxie du Splinter)", "Type": "Galaxie", "Rare": "Oui", "Note": "Tranchante, superbe"},
+            {"Nom": "Abell 39 (La Bulle)", "Type": "Planétaire", "Rare": "Extrême", "Note": "Filtre OIII obligatoire"}
+        ]
+        
+    st.success(f"Mode détecté : **{cat_type}**")
+    st.table(targets)
 
 with tab2:
-    st.subheader("Simulation de Mosaïque")
-    target_size = st.number_input("Taille de la cible (arcmin)", value=120.0)
+    st.header("Simulateur de Champ de Vision (FOV)")
+    fov_w = (cam["w"] / scope["focal"]) * (180/np.pi) * 60
+    fov_h = (cam["h"] / scope["focal"]) * (180/np.pi) * 60
+    st.info(f"Votre champ réel : **{fov_w:.1f}' x {fov_h:.1f}' arcmin**")
     
-    fov_w = (cam_w / foc) * (180/np.pi) * 60 # en arcmin
-    fov_h = (cam_h / foc) * (180/np.pi) * 60 # en arcmin
+    # Calcul mosaïque
+    obj_size = st.number_input("Taille de l'objet à photographier (arcmin)", value=60)
+    tx = int(np.ceil(obj_size / (fov_w * 0.8)))
+    ty = int(np.ceil(obj_size / (fov_h * 0.8)))
     
-    st.write(f"Votre champ actuel : **{fov_w:.1f}' x {fov_h:.1f}'**")
-    
-    tiles_w = int(np.ceil(target_size / (fov_w * 0.8))) # 20% d'overlap
-    tiles_h = int(np.ceil(target_size / (fov_h * 0.8)))
-    
-    if tiles_w * tiles_h > 1:
-        st.warning(f"⚠️ Mosaïque nécessaire : **{tiles_w} x {tiles_h}** ({tiles_w * tiles_h} tuiles)")
-        st.info(f"Temps total estimé (à 2h par tuile) : **{tiles_w * tiles_h * 2} heures**")
+    if tx*ty > 1:
+        st.warning(f"📐 Mosaïque nécessaire : {tx} x {ty} tuiles ({tx*ty} au total).")
     else:
-        st.success("✅ La cible tient en une seule pose !")
+        st.success("✅ La cible rentre dans un seul panneau !")
 
 with tab3:
-    st.subheader("Bilan Électrique Nomad")
-    c1, c2 = st.columns(2)
+    st.header("Gestion de la Batterie")
+    st.write(f"Analyse de la station : **{sel_ps}**")
     
-    # Liste de batteries du marché (Exemples)
-    batteries_market = {
-        "Bluetti EB3A (268Wh)": 22,
-        "Jackery 500 (518Wh)": 43,
-        "Batterie Marine Décharge Lente (100Ah)": 100,
-        "EcoFlow River Pro (720Wh)": 60
-    }
+    # Graphique
+    h_x = np.linspace(0, autonomie_h, 20)
+    batt_y = [ps["ah"] - (total_amps * t) for t in h_x]
     
-    selected_batt = c1.selectbox("Comparer avec une batterie du marché", list(batteries_market.keys()))
-    cap_val = batteries_market[selected_batt]
-    
-    autonomie = cap_val / st.session_state.inventory['consumption']
-    
-    c2.metric("Autonomie sur ce modèle", f"{autonomie:.1f} h")
-    
-    # Graphique de décharge
-    h_range = np.linspace(0, autonomie, 10)
-    cap_range = np.linspace(cap_val, 0, 10)
-    fig, ax = plt.subplots()
-    ax.plot(h_range, cap_range, label="Niveau Batterie")
-    ax.set_xlabel("Heures de shoot")
-    ax.set_ylabel("Capacité restante (Ah)")
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.fill_between(h_x, 0, batt_y, color="#00ff00", alpha=0.3)
+    ax.plot(h_x, batt_y, color="#00ff00", lw=2)
+    ax.set_ylim(0, ps["ah"])
+    ax.set_facecolor("#121212")
+    fig.patch.set_facecolor("#121212")
+    ax.tick_params(colors='white')
+    ax.set_xlabel("Heures de Shoot", color="white")
+    ax.set_ylabel("Capacité Ah", color="white")
     st.pyplot(fig)
-
-with tab4:
-    st.subheader("Génération de séquence")
-    soft = st.radio("Logiciel de capture", ["N.I.N.A", "ASIAIR", "Stellarmate/Ekos"])
     
-    if st.button("Générer la liste d'import"):
-        st.code(f"# Séquence pour {soft}\n# Cible: {target_name if 'target_name' in locals() else 'Scan'}\n# Temps estimé: {autonomie:.1f}h")
-        st.download_button("Télécharger CSV", "Nom,RA,DEC\nArp188,16.03,55.12", "targets.csv")
+    st.write(f"⚠️ **Note :** Gardez toujours 20% de marge de sécurité ({ps['ah']*0.2:.1f} Ah) pour éviter de couper l'ASIAIR brutalement.")
+
+st.markdown("---")
+st.caption("AstroPépites Expert v3.0 | Créé pour les astrophotographes exigeants.")
