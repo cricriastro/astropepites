@@ -1,8 +1,7 @@
 streamlit
-numpy
 pandas
+numpy
 matplotlib
-astropy
-streamlit-js-eval
 requests
+astropy
 tzlocal
