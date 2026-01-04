@@ -1,107 +1,161 @@
 import streamlit as st
+import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import requests
+import matplotlib.pyplot as plt
+from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_body
+from astropy.time import Time
+import astropy.units as u
+from datetime import datetime, timedelta
+from streamlit_js_eval import streamlit_js_eval
+import math
 
-# --- CONFIGURATION ---
-st.set_page_config(page_title="AstroPépites Romont", layout="wide")
+# --- CONFIGURATION DE LA PAGE ---
+st.set_page_config(page_title="AstroPépites Pro v4.5", layout="wide")
 
-# --- RÉCUPÉRATION SÉCURISÉE CLÉ MÉTÉO ---
-# Assure-toi que dans tes Secrets Streamlit, le nom est : openweather_key
-try:
-    API_KEY = st.secrets["openweather_key"]
-except:
-    API_KEY = None
-
-# --- DONNÉES CATALOGUES ---
-CATALOGUES = {
-    "Messier": [f"M{i}" for i in range(1, 111)],
-    "NGC": ["NGC 7000", "NGC 6960", "NGC 2237", "NGC 891", "NGC 4565", "NGC 6946"],
-    "Sharpless": [f"Sh2-{i}" for i in [129, 101, 155, 190, 240, 276]],
-    "Arp / Abell": ["Arp 244", "Arp 273", "Abell 21", "Abell 33", "Abell 39"]
-}
-
-# --- BARRE LATÉRALE ---
-with st.sidebar:
-    st.title("🛰️ Configuration")
-    
-    # 1. MÉTÉO (CORRIGÉE)
-    st.subheader("☁️ Météo Live Romont")
-    if API_KEY:
-        try:
-            url = f"https://api.openweathermap.org/data/2.5/weather?lat=46.69&lon=6.91&appid={API_KEY}&units=metric&lang=fr"
-            data = requests.get(url).json()
-            c1, c2 = st.columns(2)
-            c1.metric("Temp", f"{data['main']['temp']}°C")
-            c2.metric("Nuages", f"{data['clouds']['all']}%")
-            st.info(f"État : {data['weather'][0]['description']}")
-        except:
-            st.error("Erreur API : Vérifie ta clé")
-    else:
-        st.warning("Clé 'openweather_key' non trouvée dans Secrets")
-
-    st.divider()
-
-    # 2. SETUP MATÉRIEL (Ok)
-    with st.expander("🎒 Setup Complet", expanded=False):
-        bat = st.selectbox("Batterie", ["Bluetti EB3A (268Wh)", "Ecoflow River 2 (256Wh)", "100Ah (1280Wh)"])
-        ordi = st.selectbox("Ordinateur", ["ASI AIR Plus", "ASI AIR Mini", "Mini PC (NINA)", "Laptop"])
-        cam_p = st.selectbox("Caméra Principale", ["ASI 183MC Pro", "ASI 2600MC Pro", "ASI 533MC Pro"])
-        cam_g = st.selectbox("Caméra Guidage", ["ASI 120MM Mini", "ASI 290MM Mini"])
-        efw = st.toggle("Roue à Filtres (EFW)", value=True)
-        eaf = st.toggle("Auto Focuser (EAF)", value=True)
-        bandes = st.number_input("Bandes chauffantes", 0, 4, 1)
-
-    # 3. BOUSSOLE (Ok)
-    with st.expander("🧭 Horizon (Réglages)", expanded=True):
-        dirs = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"]
-        obs = [st.slider(d, 0, 90, 15, key=f"b_{d}") for d in dirs]
-        fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(2.5, 2.5))
-        angles = np.linspace(0, 2*np.pi, 9)
-        ax.fill(angles, [90]*9, color='#2ecc71', alpha=0.3)
-        ax.fill(angles, obs + [obs[0]], color='#e74c3c', alpha=0.8)
-        ax.set_theta_zero_location('N'); ax.set_theta_direction(-1)
-        ax.set_facecolor('#0e1117'); fig.patch.set_facecolor('#0e1117'); ax.axis('off')
-        st.pyplot(fig)
-
-# --- CALCULS ---
-wh = 268 if "EB3A" in bat else (256 if "River" in bat else 1280)
-conso = (15 if "Plus" in ordi else 10) + 18 + (bandes * 7) + 8
-autonomie = wh / conso
-
-# --- INTERFACE PRINCIPALE ---
-st.title("🔭 Planification de Session")
-
-col_left, col_right = st.columns([2, 1])
-
-with col_left:
-    # 4. CATALOGUES
-    c_cat, c_obj = st.columns(2)
-    cat_sel = c_cat.selectbox("📁 Catalogue", list(CATALOGUES.keys()))
-    obj_sel = c_obj.selectbox(f"🎯 Objet dans {cat_sel}", CATALOGUES[cat_sel])
-    
-    h_sim = st.select_slider("🕒 Heure de simulation", options=[f"{h}h" for h in [18,19,20,21,22,23,0,1,2,3,4,5,6]], value="23h")
-
-    st.markdown(f"""
-        <div style="background: #1e2130; padding: 30px; border-radius: 15px; border: 2px solid #00ffd0; text-align: center;">
-            <h1 style="color: white; margin: 0;">🔋 Autonomie : {autonomie:.1f} Heures</h1>
-            <p style="color: #00ffd0; margin: 0;">Position Romont : 46.69 N, 6.91 E | Conso : {conso} Watts</p>
-        </div>
+# --- STYLE VISION NOCTURNE ULTRA-CONTRASTE (Corrigé pour la lisibilité) ---
+st.markdown("""
+    <style>
+    .stApp { background-color: #000000; color: #FFFFFF !important; }
+    h1, h2, h3 { color: #FF3333 !important; font-weight: bold !important; }
+    .stMarkdown, label, p, span, div { color: #FFFFFF !important; font-size: 1rem !important; }
+    .stMetric { background-color: #1a0000; border: 2px solid #FF3333; border-radius: 12px; padding: 10px; }
+    [data-testid="stMetricValue"] { color: #FF3333 !important; font-weight: bold !important; }
+    .stTabs [data-baseweb="tab-list"] { background-color: #111; border-radius: 10px; }
+    .stTabs [data-baseweb="tab"] { color: #FF3333 !important; font-weight: bold !important; }
+    .mosaic-alert { background-color: #331a00; border: 1px dashed #FF8800; padding: 10px; border-radius: 10px; color: #FF8800 !important; font-weight: bold; }
+    .boost-box { background-color: #001a33; border: 1px solid #0088FF; padding: 10px; border-radius: 10px; color: #0088FF !important; }
+    hr { border: 1px solid #333; }
+    /* Style pour les sélecteurs et curseurs */
+    .stSelectbox div[data-baseweb="select"] { background-color: #222 !important; color: white !important; }
+    input { background-color: #222 !important; color: white !important; border: 1px solid #FF3333 !important; }
+    </style>
     """, unsafe_allow_html=True)
 
-with col_right:
-    st.write("**Vignette de confirmation (NASA SkyView)**")
-    # Image stable via NASA SkyView
-    clean_name = obj_sel.replace(' ', '')
-    img_url = f"https://skyview.gsfc.nasa.gov/cgi-bin/images?survey=dss&object={clean_name}&size=0.25&pixels=300"
-    
-    st.markdown(f"""
-        <div style="border: 2px solid #444; border-radius: 10px; overflow: hidden; background: black; text-align: center;">
-            <img src="{img_url}" style="width: 100%; display: block;" 
-                 onerror="this.src='https://via.placeholder.com/300/1e2130/ffffff?text={obj_sel}';">
-        </div>
-    """, unsafe_allow_html=True)
+# --- FONCTIONS TECHNIQUES ---
+def get_live_weather(lat, lon):
+    try:
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&hourly=cloudcover&timezone=auto"
+        return requests.get(url, timeout=5).json()
+    except: return None
 
-st.divider()
-st.subheader("📋 État du Setup")
-st.write(f"✅ {ordi} + {cam_p} + {cam_g} | ⚙️ EAF: {'Oui' if eaf else 'Non'} | EFW: {'Oui' if efw else 'Non'} | 🔥 {bandes} bande(s)")
+# --- SIDEBAR & GPS ---
+st.sidebar.title("🔭 AstroPépites Pro")
+loc = streamlit_js_eval(data_key='pos', function_name='getCurrentPosition', delay=100)
+if loc:
+    st.session_state.lat, st.session_state.lon = loc['coords']['latitude'], loc['coords']['longitude']
+
+u_lat = st.sidebar.number_input("Latitude", value=st.session_state.get('lat', 46.80), format="%.4f")
+u_lon = st.sidebar.number_input("Longitude", value=st.session_state.get('lon', 7.10), format="%.4f")
+h_mask = st.sidebar.slider("Masque d'Horizon (°)", 0, 60, 25)
+
+# BOUSSOLE ASIAIR (Masque d'Horizon)
+st.sidebar.header("🌲 Masque d'Horizon")
+with st.sidebar.expander("Réglage Obstacles", expanded=False):
+    mN = st.slider("Nord", 0, 90, 20); mNE = st.slider("NE", 0, 90, 15)
+    mE = st.slider("Est", 0, 90, 20); mSE = st.slider("SE", 0, 90, 30)
+    mS = st.slider("Sud", 0, 90, 15); mSW = st.slider("SW", 0, 90, 15)
+    mO = st.slider("Ouest", 0, 90, 20); mNO = st.slider("NO", 0, 90, 15)
+    mask_values = [mN, mNE, mE, mSE, mS, mSW, mO, mNO]
+    angles = np.linspace(0, 2*np.pi, 8, endpoint=False).tolist()
+    fig, ax = plt.subplots(figsize=(3, 3), subplot_kw={'projection': 'polar'}); ax.set_theta_zero_location("N"); ax.set_theta_direction(-1)
+    ax.fill(angles + [angles[0]], mask_values + [mask_values[0]], color='red', alpha=0.4)
+    ax.fill_between(angles + [angles[0]], mask_values + [mask_values[0]], 90, color='green', alpha=0.2)
+    ax.set_yticklabels([]); ax.set_xticklabels(['N', 'NE', 'E', 'SE', 'S', 'SW', 'O', 'NO'], color='white', fontsize=8)
+    ax.patch.set_facecolor('black'); fig.patch.set_facecolor('black')
+    st.sidebar.pyplot(fig)
+
+def get_horizon_limit(az):
+    idx = int(((az + 22.5) % 360) // 45)
+    return mask_values[idx]
+
+# --- MATÉRIEL & CALCULS ---
+st.sidebar.header("📸 Mon Matériel")
+TELS = {"Evolux 62ED":(400,62), "Esprit 100":(550,100), "RedCat 51":(250,51), "Newton 200/800":(800,200), "C8":(1280,203)}
+CAMS = {"ASI 183MC":(13.2, 8.8, 2.4, 84), "ASI 2600MC":(23.5, 15.7, 3.76, 80), "ASI 533MC":(11.3, 11.3, 3.76, 80)}
+tube = st.sidebar.selectbox("Télescope", list(TELS.keys()))
+cam = st.sidebar.selectbox("Caméra", list(CAMS.keys()))
+focale, diam = TELS[tube]; sw, sh, px, qe = CAMS[cam]
+f_ratio = focale / diam
+fov_w = (sw * 3438) / focale
+fov_h = (sh * 3438) / focale
+
+# --- BASE DE DONNÉES CIBLES ---
+db = []
+if st.sidebar.checkbox("💎 Pépites Rares", value=True):
+    db += [{"name": "Sh2-157 (Lobster)", "ra": "23:16:04", "dec": "+60:02:06", "type": "Emission", "size_w": 60, "size_h": 50},
+           {"name": "vdB 141 (Ghost)", "ra": "21:16:29", "dec": "+68:15:51", "type": "Reflection", "size_w": 15, "size_h": 15}]
+if st.sidebar.checkbox("⭐ Messier", value=True):
+    db += [{"name": "M31 (Andromède)", "ra": "00:42:44", "dec": "+41:16:09", "type": "Galaxy", "size_w": 180, "size_h": 60},
+           {"name": "M42 (Orion)", "ra": "05:35:17", "dec": "-05:23:28", "type": "Emission", "size_w": 65, "size_h": 60}]
+if st.sidebar.checkbox("🌌 NGC / IC", value=False):
+    db += [{"name": "NGC 2237 (Rosette)", "ra": "06:32:19", "dec": "+05:03:12", "type": "Emission", "size_w": 80, "size_h": 80}]
+
+# --- APP ---
+st.title("🔭 AstroPépites Pro v4.4")
+t_radar, t_meteo, t_batt = st.tabs(["💎 Radar & Planning", "☁️ Météo Live", "🔋 Énergie"])
+
+now = Time.now(); obs_loc = EarthLocation(lat=u_lat*u.deg, lon=u_lon*u.deg)
+try: moon_pos = get_body("moon", now)
+except: moon_pos = None
+
+with t_radar:
+    # Sélecteur unique pour activer l'accordéon
+    target_names = [t['name'] for t in db]
+    active_target = st.selectbox("🎯 Cible active (pour voir le planning) :", ["--- Sélectionner ---"] + target_names)
+    
+    for t in db:
+        coord = SkyCoord(t['ra'], t['dec'], unit=(u.hourangle, u.deg))
+        altaz = coord.transform_to(AltAz(obstime=now, location=obs_loc))
+        limit = get_horizon_limit(altaz.az.deg)
+        visible = altaz.alt.deg > limit
+        
+        if t['name'] == active_target_name or active_target_name == "--- Sélectionner ---": # Affiche tout si rien sélectionné
+            col1, col2, col3 = st.columns([1.5, 2, 1.2])
+            
+            with col1:
+                img = f"https://alasky.u-strasbg.fr/hips-image-services/hips2fits?hips=CDS%2FP%2FDSS2%2Fcolor&ra={coord.ra.deg}&dec={coord.dec.deg}&width=450&height=450&fov=1.5&format=jpg"
+                st.image(img, use_container_width=True)
+            
+            with col2:
+                status = "✅ DÉGAGÉ" if visible else "❌ MASQUÉ"
+                st.subheader(f"{t['name']} {status}")
+                st.write(f"📍 Alt : **{round(altaz.alt.deg)}°** | ✨ Filtre : **{'Dual-Band' if t['type']=='Emission' else 'RGB'}**")
+                
+                if t['type'] == "Galaxy":
+                    st.markdown('<div class="boost-box">🚀 Expert Boost : Pensez au H-Alpha pour les bras !</div>', unsafe_allow_html=True)
+                
+                # --- NOUVEAU : COURBE D'ALTITUDE DANS L'ACCORDÉON ---
+                with st.expander("📈 Planning de Visibilité", expanded=(t['name'] == active_target_name)):
+                    times = now + np.linspace(0, 12, 24) * u.hour
+                    hours = [(datetime.now() + timedelta(hours=i*0.5)).strftime("%H:%M") for i in range(24)]
+                    alts = [max(0, coord.transform_to(AltAz(obstime=ts, location=obs_loc)).alt.deg) for ts in times]
+                    st.line_chart(pd.DataFrame({"Altitude": alts}, index=hours), color="#FF3333")
+                    st.caption("Le sommet de la courbe est le passage au Méridien.")
+
+            with col3:
+                expo = round(4 * (f_ratio/4)**2 * (80/qe), 1)
+                st.metric("Temps suggéré", f"{expo}h")
+                st.write(f"🖼️ Cadrage : {round((t['size_w']/fov_w)*100)}%")
+                if moon_pos: st.write(f"🌙 Lune à {round(coord.separation(moon_pos).deg)}°")
+            st.markdown("---")
+
+# Les autres onglets Météo et Batterie restent identiques...
+with t_meteo:
+    # (Code Météo v3.9 - pas de changement ici)
+    try:
+        w_url = f"https://api.open-meteo.com/v1/forecast?latitude={u_lat}&longitude={u_lon}&current_weather=true&hourly=cloudcover&timezone=auto"
+        w = requests.get(w_url).json()
+        df_w = pd.DataFrame({"Heure": [d[11:16] for d in w['hourly']['time'][:24]], "Nuages": w['hourly']['cloudcover'][:24]}).set_index("Heure")
+        st.subheader("☁️ Prévisions Nuages (%)")
+        st.area_chart(df_w, color="#FF3333")
+    except: st.error("Météo indisponible")
+
+with t_batterie:
+    # (Code Batterie v3.9 - identique)
+    st.subheader("🔋 Énergie")
+    wh = st.number_input("Wh batterie", value=240)
+    c1, c2 = st.columns(2)
+    p_m = c1.slider("Monture", 5, 25, 10); p_t = c1.slider("TEC", 0, 40, 20)
+    p_p = c2.slider("ASIAIR/PC", 5, 25, 10); p_d = c2.slider("Chauffage", 0, 40, 15)
+    st.metric("Autonomie", f"{round((wh*0.9)/(p_m+p_t+p_p+p_d), 1)} h")
