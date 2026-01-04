@@ -2,123 +2,126 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import requests
-from astropy.coordinates import SkyCoord, AltAz, EarthLocation, get_sun, get_moon, get_body
+from astropy.coordinates import SkyCoord, AltAz, EarthLocation
 from astropy import units as u
 from astropy.time import Time
-from datetime import datetime, timedelta
 
-# Configuration Pro
-st.set_page_config(page_title="AstroPépites Expert 2026", layout="wide", page_icon="🔭")
+# --- CONFIGURATION PRO ---
+st.set_page_config(page_title="AstroPépites v6 : Deep Sky Hunter", layout="wide")
 
-# --- BASES DE DONNÉES ---
-POWER_STATIONS = {"Bluetti EB3A (268Wh)": 22, "Jackery 500": 43}
-TELESCOPES = {"Sky-Watcher Evolux 62ED": 400, "Askar FRA400": 400, "C8 f/6.3": 1280}
-CAMERAS = {"ZWO ASI 183 MC Pro": {"w": 13.2, "h": 8.8, "px": 2.4, "cons": 1.5}}
+# --- BASES DE DONNÉES ÉTENDUES ---
+FILTERS_DB = {
+    "Svbony SV220 (Dual Band)": {"factor": 3.5, "type": "Narrowband"},
+    "Optolong L-Pro": {"factor": 1.5, "type": "RGB/L"},
+    "Sans filtre / UV-IR Cut": {"factor": 1.0, "type": "RGB"}
+}
 
-# --- SIDEBAR CONFIG ---
-st.sidebar.title("🛠 SETUP & HORIZON")
-sel_ps = st.sidebar.selectbox("Batterie", list(POWER_STATIONS.keys()))
-sel_scope = st.sidebar.selectbox("Tube", list(TELESCOPES.keys()))
-sel_cam = st.sidebar.selectbox("Caméra", list(CAMERAS.keys()))
-h_limit = st.sidebar.slider("Horizon mini (°)", 0, 60, 20)
+TARGETS_PRO = [
+    {"name": "Arp 188 (Têtard)", "rarity": 95, "type": "Galaxie", "desc": "Quasi jamais vue en amateur.", "exposure": 600},
+    {"name": "Abell 31", "rarity": 88, "type": "Nébuleuse P.", "desc": "Extrêmement diffuse, défi OIII.", "exposure": 300},
+    {"name": "Ou4 (Le Calmar)", "rarity": 98, "type": "Nébuleuse", "desc": "La cible la plus dure du ciel boréal.", "exposure": 900},
+    {"name": "Sh2-129", "rarity": 82, "type": "Nébuleuse", "desc": "Nécessite beaucoup de Ha.", "exposure": 300},
+    {"name": "M31 (Andromède)", "rarity": 5, "type": "Galaxie", "desc": "L'objet le plus photographié.", "exposure": 120}
+]
 
-# --- FONCTIONS MÉTÉO & IMAGES ---
-def get_weather(lat, lon):
-    # Utilisation d'une API gratuite (7-timer) adaptée à l'astro
-    url = f"https://www.7timer.info/bin/astro.php?lon={lon}&lat={lat}&ac=0&unit=metric&output=json"
-    try:
-        data = requests.get(url).json()
-        return data['dataseries'][:8] # 2 jours
-    except: return None
+# --- SIDEBAR : CALCUL DE CHARGE & MATÉRIEL ---
+st.sidebar.title("🚀 SETUP LOGISTIQUE")
+sel_ps = st.sidebar.selectbox("Batterie Nomade", ["Bluetti EB3A (268Wh)", "Jackery 500"])
+sel_scope = st.sidebar.selectbox("Optique", ["Sky-Watcher Evolux 62ED"])
 
-def get_wiki_image(target):
-    # Cherche une vignette sur Wikipedia
-    url = f"https://fr.wikipedia.org/api/rest_v1/page/summary/{target.replace(' ', '_')}"
-    try:
-        r = requests.get(url).json()
-        return r['thumbnail']['source']
-    except: return "https://via.placeholder.com/200?text=No+Photo"
+st.sidebar.subheader("⚖️ Poids sur la GTi")
+poids_tube = 2.5 # Evolux 62ED
+poids_cam = 0.5  # ASI 183MC
+poids_accessoires = st.sidebar.slider("Accessoires (Guide, Cables, EAF) kg", 0.5, 3.0, 1.2)
+poids_total = poids_tube + poids_cam + poids_accessoires
 
-# --- LOGIQUE PRINCIPALE ---
-st.title("🔭 AstroPépites : Planificateur Pro 2026")
+max_gti = 5.0
+charge_utile = (poids_total / max_gti) * 100
 
-tab1, tab2, tab3, tab4 = st.tabs(["🎯 Cibles & Vignettes", "☁️ Météo Astro", "🪐 Système Solaire", "🗓 Éphémérides 2026"])
+if charge_utile > 90:
+    st.sidebar.error(f"⚠️ CHARGE : {poids_total:.1f}kg ({charge_utile:.0f}%) - Trop lourd !")
+else:
+    st.sidebar.success(f"✅ CHARGE : {poids_total:.1f}kg ({charge_utile:.0f}%)")
 
-lat, lon = 48.85, 2.35 # Coordonnées par défaut
-now = Time.now()
-location = EarthLocation(lat=lat*u.deg, lon=lon*u.deg)
+# --- INTERFACE PRINCIPALE ---
+st.title("🌌 AstroPépites : Planificateur de Raretés")
 
-with tab1:
-    st.header("🎯 Sélection de la Pépite")
-    targets_db = [
-        {"name": "M31", "display": "Andromède", "ra": "00h42m44s", "dec": "+41d16m09s"},
-        {"name": "M42", "display": "Nébuleuse d'Orion", "ra": "05h35m17s", "dec": "-05d23m28s"},
-        {"name": "NGC 6960", "display": "Petites Dentelles", "ra": "20h45m42s", "dec": "+30d42m30s"},
-        {"name": "Arp 273", "display": "La Rose de Galaxies", "ra": "02h21m28s", "dec": "+39d22m32s"}
-    ]
-    
-    sel_obj = st.selectbox("Cible", [t['display'] for t in targets_db])
-    t_data = next(t for t in targets_db if t['display'] == sel_obj)
-    
-    col_img, col_info = st.columns([1, 2])
-    with col_img:
-        st.image(get_wiki_image(t_data['name']), width=250, caption=sel_obj)
-    
-    with col_info:
-        coord = SkyCoord(t_data['ra'], t_data['dec'])
-        # Calcul temps de shoot (Altitude > horizon ET Soleil < -12°)
-        times = now + np.linspace(0, 24, 100)*u.hour
-        altaz = coord.transform_to(AltAz(obstime=times, location=location))
-        sun = get_sun(times).transform_to(AltAz(obstime=times, location=location))
-        
-        visible = (altaz.alt.deg > h_limit) & (sun.alt.deg < -12)
-        shoot_hours = np.sum(visible) * (24/100)
-        
-        st.metric("⏳ Fenêtre de shoot cette nuit", f"{shoot_hours:.1f} heures")
-        st.write(f"**Coordonnées :** {t_data['ra']} / {t_data['dec']}")
-        
-        # Boutons d'export
-        st.download_button("💾 Export ASIAIR (CSV)", f"Name,RA,Dec\n{sel_obj},{t_data['ra']},{t_data['dec']}", file_name="target.csv")
+# --- SÉLECTION CIBLE & SCORE DE RARETÉ ---
+st.header("🎯 Analyse de la cible")
+sel_obj_name = st.selectbox("Sélectionner une cible", [t["name"] for t in TARGETS_PRO])
+t_data = next(t for t in TARGETS_PRO if t["name"] == sel_obj_name)
 
-with tab2:
-    st.header("☁️ Prévisions Météo Astro (48h)")
-    w_data = get_weather(lat, lon)
-    if w_data:
-        cols = st.columns(len(w_data))
-        for i, d in enumerate(w_data):
-            with cols[i]:
-                st.write(f"+{d['timepoint']}h")
-                st.info(f"☁️ {d['cloudcover']}")
-                st.caption(f"Temp: {d['temp2m']}°C")
-    else:
-        st.error("Météo indisponible.")
+col_rarity, col_desc = st.columns([1, 2])
 
-with tab3:
-    st.header("🪐 Planètes & Comètes")
-    planets = ['Mars', 'Jupiter', 'Saturn']
-    p_cols = st.columns(len(planets))
-    for i, p in enumerate(planets):
-        p_coord = get_body(p, now, location)
-        p_altaz = p_coord.transform_to(AltAz(obstime=now, location=location))
-        with p_cols[i]:
-            st.write(f"**{p}**")
-            st.write(f"Alt: {p_altaz.alt.deg:.1f}°")
-            if p_altaz.alt.deg > 0: st.success("Visible")
-            else: st.error("Sous l'horizon")
+with col_rarity:
+    # Score de rareté (simulant un index Astrobin)
+    rarity_color = "red" if t_data['rarity'] > 80 else "orange" if t_data['rarity'] > 50 else "green"
+    st.markdown(f"""
+        <div style="text-align:center; border:2px solid {rarity_color}; padding:20px; border-radius:15px;">
+            <h1 style="color:{rarity_color}; margin:0;">{t_data['rarity']}%</h1>
+            <p style="margin:0;">SCORE DE RARETÉ</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-with tab4:
-    st.header("🗓 Événements Majeurs 2026")
-    events = [
-        {"Date": "17 Février 2026", "Event": "Occultation de Saturne par la Lune"},
-        {"Date": "12 Août 2026", "Event": "ÉCLIPSE TOTALE DE SOLEIL (Espagne/Islande)"},
-        {"Date": "28 Août 2026", "Event": "Éclipse Lunaire Partielle"},
-        {"Date": "Octobre 2026", "Event": "Pic des Orionides (Météores)"}
-    ]
-    st.table(events)
+with col_desc:
+    st.subheader(t_data['name'])
+    st.write(f"**Type :** {t_data['type']}")
+    st.info(f"**L'avis de l'expert :** {t_data['desc']}")
 
+# --- CALCULATEUR D'EXPOSITION (ASIAIR) ---
 st.divider()
-# Logistique Batterie
-amps = MOUNTS[sel_mount] + CAMERAS[sel_cam]['cons'] + 1.5
-autonomie = POWER_STATIONS[sel_ps] / amps
-st.write(f"🔋 Avec ta **{sel_ps}**, tu peux tenir **{autonomie:.1f}h** en shootant **{sel_obj}**.")
+st.subheader("📸 Paramètres d'acquisition (ASIAIR)")
+sel_filter = st.selectbox("Filtre utilisé pour cette session", list(FILTERS_DB.keys()))
+
+base_exp = t_data['exposure']
+filter_mult = FILTERS_DB[sel_filter]['factor']
+final_exp = base_exp * filter_mult
+
+c1, c2, c3 = st.columns(3)
+c1.metric("Pose Unitaire conseillée", f"{int(final_exp)} s")
+c2.metric("Gain ASIAIR (ASI183)", "111 (Unity)")
+c3.metric("Température Capteur", "-10°C")
+
+st.warning(f"💡 Avec le filtre **{sel_filter}**, vous devez poser **{filter_mult}x plus longtemps** qu'en RGB pour obtenir un signal propre sur cette cible rare.")
+
+# --- HORIZON & ÉNERGIE ---
+st.divider()
+st.subheader("🔋 Logistique Bluetti & Horizon")
+
+# Consommation estimée
+amps = 3.5 # Consommation moyenne avec ASIAIR + Monture + 183MC + Chauffage
+autonomie = 22 / amps # Pour la Bluetti EB3A (22Ah)
+
+col_batt, col_graph = st.columns([1, 2])
+
+with col_batt:
+    st.write(f"**Batterie :** Bluetti EB3A")
+    st.write(f"**Conso estimée :** {amps} A")
+    st.metric("Autonomie totale", f"{autonomie:.1f} h")
+    st.progress(min(1.0, autonomie/10), "Capacité de nuit")
+
+with col_graph:
+    # Simulation graphique de visibilité
+    h_data = np.linspace(0, 10, 50)
+    alt_data = 30 + 40 * np.sin(h_data/2) # Courbe bidon pour illustration
+    fig, ax = plt.subplots(figsize=(8, 3))
+    ax.plot(h_data, alt_data, color="#00ffcc")
+    ax.axhline(20, color="red", linestyle="--", label="Horizon")
+    ax.set_facecolor("#0e1117")
+    fig.patch.set_facecolor("#0e1117")
+    st.pyplot(fig)
+
+# --- EXPORT FINAL ---
+st.divider()
+st.subheader("📲 Envoyer la séquence vers l'ASIAIR")
+if st.button("Générer le récapitulatif de session"):
+    recap = f"""
+    CONFIG SESSION :
+    Cible : {sel_obj_name}
+    RA/DEC : {t_data['name']}
+    Filtre : {sel_filter}
+    Pose : {int(final_exp)}s
+    Autonomie : {autonomie:.1f}h
+    """
+    st.code(recap)
+    st.success("Copié dans le journal ! Prêt pour le collage dans l'app ASIAIR.")
