@@ -5,82 +5,93 @@ import requests
 from datetime import datetime, timedelta
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="AstroPépites Expert", layout="wide")
+st.set_page_config(page_title="AstroPépites Scientifique", layout="wide")
 
-# --- DATA RÉELLE ---
-BATTERIES = {"Bluetti EB3A": 268, "Bluetti EB70": 716, "EcoFlow River 2": 256}
-MONTURES = {"Star Adventurer GTi": 6, "ZWO AM5": 10, "EQ6-R Pro": 15, "Heq5": 12}
-CAMERAS_DEFAULT = ["ZWO ASI2600", "ZWO ASI533", "ZWO ASI294", "Canon DSLR"]
+# --- BASE DE DONNÉES CIBLES ---
+TARGETS_INTEL = {
+    "M31 Andromède": {"type": "Galaxie", "desc": "Spectre continu + régions HII (Rouge)."},
+    "M42 Orion": {"type": "Nébuleuse", "desc": "Émission intense (Ha, OIII)."},
+    "C/2023 A3 (Comète)": {"type": "Comète", "desc": "Spectre continu + Gaz (Cyan/Vert)."},
+    "NGC 7000 (North America)": {"type": "Nébuleuse émission", "desc": "Hydrogène pur (Ha)."},
+    "M45 Les Pléiades": {"type": "Amas", "desc": "Réflexion bleue (Spectre continu)."}
+}
 
-# --- SIDEBAR SETUP ---
-st.sidebar.title("🔭 Mon Matériel Réel")
+# --- SIDEBAR : CONFIGURATION ---
+st.sidebar.title("🛠️ Configuration Expert")
 
-with st.sidebar.expander("🎥 Caméra & Capteur", expanded=True):
-    cam_choice = st.selectbox("Modèle", CAMERAS_DEFAULT + ["Autre (Saisie manuelle)"])
-    if cam_choice == "Autre (Saisie manuelle)":
-        cam_name = st.text_input("Nom de ta caméra", "Ma Caméra")
-        w_cam = st.number_input("Conso réelle (Watts)", 1, 30, 15)
-        px_size = st.number_input("Taille pixel (µm)", 1.0, 10.0, 3.76)
-    else:
-        cam_name = cam_choice
-        w_cam = 15 # Moyenne pour cam refroidie
-        px_size = 3.76
+with st.sidebar.expander("🎥 Caméra Personnalisée", expanded=True):
+    cam_name = st.text_input("Modèle", "ASI294MC Pro")
+    # Pas de slider "Grrr", que des boutons + / -
+    w_cam = st.number_input("Conso Caméra (W)", 1, 30, 15)
+    px_size = st.number_input("Taille des pixels (µm)", 1.0, 10.0, 4.63)
 
-with st.sidebar.expander("🔋 Énergie & Conso", expanded=True):
-    bat_sel = st.selectbox("Batterie", list(BATTERIES.keys()))
-    mnt_sel = st.selectbox("Monture", list(MONTURES.keys()))
+with st.sidebar.expander("🔋 Énergie & Matériel", expanded=True):
+    bat_wh = st.number_input("Batterie (Wh)", 100, 2000, 268) # EB3A = 268
+    w_mount = st.number_input("Monture (W)", 1, 25, 8)
+    w_acc = st.number_input("ASIAIR + Guidage (W)", 1, 20, 7)
+    w_heat = st.number_input("Chauffage (W)", 0, 40, 10)
     
-    # Détail conso sans bidouillage
-    w_asiair = st.number_input("ASIAIR / Guidage (W)", 0, 20, 8)
-    w_heat = st.number_input("Résistances Chauffantes (W)", 0, 40, 12)
-    
-    total_w = w_cam + MONTURES[mnt_sel] + w_asiair + w_heat
-    # Calcul d'autonomie avec 15% de réserve de sécurité
-    autonomie_h = (BATTERIES[bat_sel] * 0.85) / total_w
+    total_w = w_cam + w_mount + w_acc + w_heat
+    # Sécurité 15% pour la batterie
+    autonomie_h = (bat_wh * 0.85) / total_w
     heure_fin = datetime.now() + timedelta(hours=autonomie_h)
 
-# --- INTERFACE PRINCIPALE ---
-st.title("🌌 AstroPépites Pro Dashboard")
+with st.sidebar.expander("🧭 Horizon (Boussole)", expanded=False):
+    h = {d: st.number_input(f"{d} (°)", 0, 90, 15) for d in ["N", "NE", "E", "SE", "S", "SO", "O", "NO"]}
 
-# Météo Romont
+# --- DASHBOARD PRINCIPAL ---
+st.title("🔭 AstroPépites Pro Dashboard")
+
+# Météo Directe (Romont)
 try:
     m = requests.get("https://api.openweathermap.org/data/2.5/weather?lat=46.65&lon=6.91&appid=16f68f1e07fea20e39f52de079037925&units=metric").json()
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Ciel", f"{m['clouds']['all']}% Nuages")
-    c2.metric("Humidité", f"{m['main']['humidity']}%")
-    c3.metric("Fin batterie", heure_fin.strftime("%H:%M"))
-except: pass
+    met1, met2, met3 = st.columns(3)
+    met1.metric("Nuages", f"{m['clouds']['all']}%")
+    met2.metric("Humidité", f"{m['main']['humidity']}%")
+    met3.metric("Coupure Batterie", heure_fin.strftime("%H:%M"))
+except:
+    st.warning("Météo : Erreur de connexion.")
 
 st.divider()
 
-# Sélection Cible et Filtre
-col_t, col_f = st.columns(2)
-target = col_t.selectbox("🎯 Cible", ["M31 Andromède", "M42 Orion", "C/2023 A3", "NGC 7000"])
-filtre = col_f.selectbox("💎 Filtre", ["Svbony SV220 (Dual-Band)", "L-Pro", "UV/IR Cut"])
+# Cible et Filtre UNIQUE
+c1, c2 = st.columns(2)
+t_name = c1.selectbox("🎯 Cible", list(TARGETS_INTEL.keys()))
+f_name = c2.selectbox("💎 Filtre", ["Svbony SV220 (Dual-Band)", "Optolong L-Pro", "UV/IR Cut"])
 
-# --- ANALYSE EXPERT (La correction !) ---
+# --- ANALYSE TECHNIQUE SANS ERREUR ---
 st.subheader("📋 Analyse du Shooting")
-info, graph = st.columns([1, 1])
 
-with info:
-    if "Andromède" in target and "SV220" in filtre:
-        st.warning("💡 **Usage Expert :** Le SV220 sur M31 sert uniquement à isoler les nébulosités H-alpha (le rouge). Prévoyez des poses sans filtre pour la structure galactique.")
-            elif "C/2023" in target and "SV220" in filtre:
-        st.error("⚠️ Le Dual-Band va tuer la queue de la comète (Cyan/Vert). Préférez un filtre clair.")
+t_type = TARGETS_INTEL[t_name]["type"]
+if f_name == "Svbony SV220 (Dual-Band)":
+    if "Galaxie" in t_type:
+        st.warning(f"💡 **Usage Expert :** Sur {t_name}, le SV220 sert à isoler les régions HII (les nébulosités rouges). C'est top pour le détail, mais n'oublie pas de faire des poses sans filtre pour la galaxie elle-même !")
+    elif "Comète" in t_type or "Amas" in t_type:
+        st.error(f"❌ **Incompatible :** Le SV220 bloque le signal de {t_name}. Tu vas perdre la comète ou les étoiles bleues.")
     else:
-        st.success(f"✅ Setup {filtre} cohérent pour {target}.")
+        st.success(f"✅ **Optimal :** Parfait pour l'émission Ha/OIII de {t_name}.")
+else:
+    st.success(f"✅ Setup {f_name} validé pour {t_name}.")
 
-    st.write(f"📸 **Capteur :** {cam_name} ({px_size}µm)")
-    st.write(f"🔋 **Autonomie :** {int(autonomie_h)}h {int((autonomie_h%1)*60)}min")
+# --- GRAPHIQUES ---
+col_graph, col_rose = st.columns([1, 1])
 
-with graph:
-    # Graphique de décharge
-    t = np.linspace(0, autonomie_h, 100)
-    c = np.linspace(100, 15, 100)
-    fig, ax = plt.subplots(figsize=(8, 3))
-    ax.plot(t, c, color='#00FF00', lw=3)
-    ax.fill_between(t, c, color='#00FF00', alpha=0.1)
-    ax.set_ylabel("Batterie %"); ax.set_xlabel("Heures")
+with col_graph:
+    st.write(f"🔋 **Batterie :** Vide à {heure_fin.strftime('%H:%M')} ({int(autonomie_h)}h {int((autonomie_h%1)*60)}min)")
+    t_plot = np.linspace(0, autonomie_h, 100)
+    c_plot = np.linspace(100, 15, 100)
+    fig, ax = plt.subplots(figsize=(6, 2))
+    ax.plot(t_plot, c_plot, color='lime', lw=2)
+    ax.fill_between(t_plot, c_plot, color='lime', alpha=0.1)
     ax.set_facecolor("#0e1117"); fig.patch.set_facecolor("#0e1117")
-    ax.tick_params(colors='white')
+    ax.tick_params(colors='white'); ax.set_ylabel("%", color="white")
     st.pyplot(fig)
+
+with col_rose:
+    angles = np.radians([0, 45, 90, 135, 180, 225, 270, 315])
+    fig_h, ax_h = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(3,3))
+    ax_h.bar(angles, list(h.values()), color='red', alpha=0.5)
+    ax_h.set_theta_zero_location('N'); ax_h.set_theta_direction(-1)
+    ax_h.set_facecolor("#0e1117"); fig_h.patch.set_facecolor("#0e1117")
+    ax_h.tick_params(colors='white')
+    st.pyplot(fig_h)
