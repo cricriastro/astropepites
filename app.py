@@ -1,97 +1,90 @@
 import streamlit as st
 import numpy as np
+import matplotlib.pyplot as plt
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="AstroPépites : Pilotage", layout="wide")
+st.set_page_config(page_title="AstroPépites Master 2026", layout="wide")
 
-# --- DATA MATÉRIEL (Consommation en Watts) ---
-CAM_MODELS = {
-    "ZWO ASI2600MC/MM Pro": 20, "ZWO ASI533MC/MM Pro": 15,
-    "ZWO ASI294MC/MM Pro": 18, "ZWO ASI6200MC/MM Pro": 25,
-    "ZWO ASI1600MM Pro": 15, "Canon/Sony Mirrorless": 7
-}
-
-BATTERIES = {
-    "Bluetti EB3A (268Wh)": 268,
-    "Ecoflow River 2 (256Wh)": 256,
-    "Batterie Lithium 100Ah (1280Wh)": 1280
-}
-
+# --- DATA ---
+CAM_DB = {"ZWO ASI2600MC Pro": 20, "ZWO ASI533MC Pro": 15, "ZWO ASI294MC Pro": 18, "ASI 120MM (Guide)": 2}
+BATTERIES = {"Bluetti EB3A (268Wh)": 268, "Ecoflow River (256Wh)": 256, "LiFePO4 100Ah": 1280}
 CATALOGUES = {
     "Messier": [f"M{i}" for i in range(1, 111)],
-    "NGC": ["NGC 7000", "NGC 6960", "NGC 2237", "NGC 891"],
-    "Sharpless (Sh2)": ["Sh2-129", "Sh2-101", "Sh2-155", "Sh2-190"],
-    "Arp": ["Arp 244", "Arp 273"]
+    "NGC": ["NGC 7000", "NGC 6960", "NGC 2237"],
+    "Sharpless": ["Sh2-129", "Sh2-101", "Sh2-190"]
 }
 
-# --- BARRE LATÉRALE ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.title("🛰️ Gestion du Setup")
+    st.title("⚙️ Setup & Energie")
     
-    # MATÉRIEL DANS DES MENUS RÉTRACTABLES
-    with st.expander("🔋 Énergie & Pilotage", expanded=True):
-        bat_choice = st.selectbox("Batterie Nomade", list(BATTERIES.keys()))
-        control = st.selectbox("Contrôle", ["ASI AIR Plus", "ASI AIR Mini", "Mini PC / NINA"])
-        conso_fixe = 15 if "Plus" in control else 12
+    with st.expander("🔋 Alimentation & Coeur", expanded=True):
+        bat = st.selectbox("Batterie", list(BATTERIES.keys()))
+        pilot = st.selectbox("Contrôle", ["ASI AIR Plus", "ASI AIR Mini", "Mini PC"])
+        conso_fixe = 15 if "Plus" in pilot else 12
 
-    with st.expander("📸 Imageur & Guidage", expanded=True):
-        cam_p = st.selectbox("Caméra Principale", list(CAM_MODELS.keys()))
-        cam_g = st.selectbox("Caméra de Guidage", ["ASI 120MM Mini", "ASI 290MM Mini", "ASI 174MM Mini"])
+    with st.expander("📸 Imagerie & Accessoires", expanded=True):
+        cam_p = st.selectbox("Caméra Principale", list(CAM_DB.keys()))
+        cam_g = st.selectbox("Caméra Guidage", ["ASI 120MM Mini", "ASI 290MM Mini"])
         efw = st.toggle("Roue à Filtres (EFW)", value=True)
-        eaf = st.toggle("Focuseur Auto (EAF)", value=True)
-        bandes = st.number_input("Bandes chauffantes (quantité)", 0, 3, 1)
+        eaf = st.toggle("Auto Focuser (EAF)", value=True)
+        bandes = st.number_input("Bandes chauffantes", 0, 5, 1)
 
-    with st.expander("🔭 Monture", expanded=False):
-        monture = st.selectbox("Modèle", ["Star Adventurer GTi", "ZWO AM5", "EQ6-R Pro"])
-
-    # CALCUL FINAL SANS GRAPHIQUE
-    conso_totale = conso_fixe + CAM_MODELS[cam_p] + 2 + (bandes * 7) + (2 if eaf else 0) + (1 if efw else 0)
-    h_autonomie = BATTERIES[bat_choice] / conso_totale
+    # Calcul conso et autonomie
+    total_w = conso_fixe + CAM_DB[cam_p] + 2 + (bandes * 7) + (2 if eaf else 0) + (1 if efw else 0)
+    autonomie = BATTERIES[bat] / total_w
 
     st.divider()
 
-    # BOUSSOLE DANS UN MENU QUI SE REFERME
-    with st.expander("🧭 Boussole d'Horizon", expanded=False):
-        st.write("Altitude min des obstacles (°)")
+    # --- LA BOUSSOLE (VERTE ET ROUGE) ---
+    with st.expander("🧭 Boussole d'Horizon", expanded=True):
         dirs = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"]
-        obs = {d: st.number_input(f"{d}", 0, 90, 15) for d in dirs}
+        vals = []
+        c1, c2 = st.columns(2)
+        for i, d in enumerate(dirs):
+            with c1 if i % 2 == 0 else c2:
+                vals.append(st.number_input(f"{d} (°)", 0, 90, 15))
 
-# --- INTERFACE PRINCIPALE ---
-st.title("🔭 Planification de Session")
+        # Dessin de la boussole
+        fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(3, 3))
+        angles = np.linspace(0, 2*np.pi, 9)
+        # Fond vert
+        ax.fill(angles, [90]*9, color='green', alpha=0.2)
+        # Zones rouges (obstacles)
+        display_vals = vals + [vals[0]]
+        ax.fill(angles, display_vals, color='red', alpha=0.6)
+        
+        ax.set_theta_zero_location('N')
+        ax.set_theta_direction(-1)
+        ax.set_ylim(0, 90)
+        ax.set_facecolor('#0e1117'); fig.patch.set_facecolor('#0e1117')
+        ax.tick_params(colors='white', labelsize=7)
+        st.pyplot(fig)
 
-# 1. Sélection et Autonomie
-c_sel, c_res = st.columns([2, 1])
+# --- PRINCIPAL ---
+st.title("🔭 Planification Expert")
 
-with c_sel:
-    col1, col2 = st.columns(2)
-    cat_sel = col1.selectbox("Catalogue", list(CATALOGUES.keys()))
-    targ_sel = col2.selectbox(f"Cible {cat_sel}", CATALOGUES[cat_sel])
+col_info, col_img = st.columns([2, 1])
+
+with col_info:
+    c_cat, c_obj = st.columns(2)
+    cat_s = c_cat.selectbox("Catalogue", list(CATALOGUES.keys()))
+    obj_s = c_obj.selectbox("Cible", CATALOGUES[cat_s])
     
+    st.success(f"⚡ **AUTONOMIE : {autonomie:.1f} HEURES** (Conso: {total_w}W)")
+    st.info(f"📍 Romont : Cible validée selon ton horizon local.")
+
+with col_img:
+    st.write("**Vignette Réelle (DSS2)**")
+    # Nettoyage du nom pour l'image
+    img_id = obj_s.replace(" ", "")
+    url = f"https://aladin.u-strasbg.fr/java/nph-aladin.pl?Object={img_id}&Size=15&Output=JPEG"
     st.markdown(f"""
-        <div style="background-color: #1e2130; padding: 20px; border-radius: 15px; border-left: 5px solid #00ffd0;">
-            <h2 style="margin:0; color: white;">⚡ Autonomie estimée : {h_autonomie:.1f} Heures</h2>
-            <p style="margin:0; color: #aaa;">Consommation totale calculée : {conso_totale} Watts</p>
+        <div style="border: 2px solid #444; border-radius: 10px; overflow: hidden; background: black;">
+            <img src="{url}" style="width: 100%; display: block;" onerror="this.onerror=null; this.src='https://via.placeholder.com/300x200?text=Image+En+Cours...';">
         </div>
     """, unsafe_allow_html=True)
 
-with c_res:
-    # SYSTÈME D'IMAGE CORRIGÉ
-    st.write("**Aperçu de la cible**")
-    clean_name = targ_sel.replace(' ', '')
-    # Utilisation d'un lien direct plus robuste
-    st.image(f"https://api.astrometry.net/thumbnail/{clean_name}", 
-             width=250, 
-             caption=f"Cible : {targ_sel}",
-             use_container_width=False)
-
-# 2. État du Setup
 st.divider()
-st.subheader("📋 Récapitulatif du matériel engagé")
-col_a, col_b, col_c = st.columns(3)
-
-col_a.write(f"✅ **Pilotage :** {control}")
-col_a.write(f"✅ **Caméra :** {cam_p}")
-col_b.write(f"✅ **Guidage :** {cam_g}")
-col_b.write(f"✅ **Accessoires :** {'EAF' if eaf else ''} {'+ EFW' if efw else ''}")
-col_c.write(f"✅ **Énergie :** {bat_choice}")
-col_c.write(f"✅ **Site :** Romont (CH)")
+st.subheader("📋 État de la mission")
+st.write(f"Configuration : **{cam_p}** sur **{bat}** avec **{pilot}**.")
